@@ -1,0 +1,668 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../audio/quran_download_service.dart';
+import '../../../core/app_state.dart';
+import '../../../core/highlighting_controller.dart';
+import 'dialog_service.dart';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. SETTINGS TILE & DIVIDER
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Thin flush separator line for grouped lists.
+class SettingDivider extends StatelessWidget {
+  final ThemeColors c;
+  const SettingDivider({super.key, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = AppState.instance.isDarkMode;
+    return Container(
+      height: 1,
+      margin: const EdgeInsetsDirectional.only(start: 56, end: 16),
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.05),
+    );
+  }
+}
+
+/// Minimalist setting row tile that handles trailing controls and sub-sliders.
+class SettingTile extends StatelessWidget {
+  final IconData? icon;
+  final Widget? iconWidget;
+  final String title;
+  final ThemeColors c;
+  final Widget? trailing;
+  final Widget? bottom;
+  final Widget? badge;
+  final double? trailingWidth;
+  final VoidCallback? onTap;
+
+  const SettingTile({
+    super.key,
+    this.icon,
+    this.iconWidget,
+    required this.title,
+    required this.c,
+    this.trailing,
+    this.bottom,
+    this.badge,
+    this.trailingWidth,
+    this.onTap,
+  }) : assert(icon != null || iconWidget != null,
+            'Either icon or iconWidget must be provided');
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = AppState.instance.isDarkMode;
+
+    final content = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981)
+                      .withValues(alpha: isDark ? 0.14 : 0.09),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF10B981)
+                        .withValues(alpha: isDark ? 0.28 : 0.20),
+                    width: 1,
+                  ),
+                ),
+                child: iconWidget ??
+                    (icon != null
+                        ? Icon(icon, color: const Color(0xFF10B981), size: 20)
+                        : const SizedBox.shrink()),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 6),
+                        badge!,
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                if (trailingWidth != null)
+                  SizedBox(width: trailingWidth, child: trailing!)
+                else if (trailing is AppSegmentedPillSelector)
+                  SizedBox(width: 122, child: trailing!)
+                else if (trailing is Row)
+                  SizedBox(width: 130, child: trailing!)
+                else
+                  trailing!,
+              ],
+            ],
+          ),
+          if (bottom != null) ...[
+            const SizedBox(height: 14),
+            bottom!,
+          ],
+        ],
+      ),
+    );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: content,
+        ),
+      );
+    }
+    return content;
+  }
+}
+
+/// Offline Quran Recitation & Timings download tile for settings.
+class QuranDownloadTile extends StatelessWidget {
+  final ThemeColors c;
+  final bool isAr;
+  final bool isDark;
+
+  const QuranDownloadTile({
+    super.key,
+    required this.c,
+    required this.isAr,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        QuranDownloadService.instance.isDownloading,
+        QuranDownloadService.instance.progress,
+      ]),
+      builder: (context, _) {
+        final isDownloading = QuranDownloadService.instance.isDownloading.value;
+        final progress = QuranDownloadService.instance.progress.value;
+        final percent = (progress * 100).toInt();
+
+        final app = AppState.instance;
+        final isId = app.isIndonesian;
+        return SettingTile(
+          icon: Icons.cloud_download_rounded,
+          title: isId ? 'Unduh Audio Tilawah' : 'Download Recitation Audio',
+          c: c,
+          onTap: () {
+            Navigator.of(context).pop();
+            AudioDownloadDialog.show(context);
+          },
+          trailing: isDownloading
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: c.primary.withValues(alpha: isDark ? 0.20 : 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: c.primary.withValues(alpha: isDark ? 0.40 : 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          value: progress.clamp(0.0, 1.0),
+                          valueColor: AlwaysStoppedAnimation<Color>(c.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isAr ? '${QuranTypography.toArabicDigits(percent)}٪' : '$percent%',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          color: c.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 15,
+                  color: c.muted,
+                ),
+        );
+      },
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. SETTINGS MODAL BOTTOM SHEET
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Settings modal bottom sheet with modern styling and responsive reactivity.
+class SettingsSheet extends StatelessWidget {
+  const SettingsSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBottomSheet(
+      maxHeightFactor: 0.75,
+      extraListenable: AppState.instance.mushafModeNotifier,
+      headerBuilder: (context, c, isAr, isDark) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF10B981)
+                .withValues(alpha: isDark ? 0.08 : 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF10B981)
+                  .withValues(alpha: isDark ? 0.22 : 0.15),
+              width: 0.8,
+            ),
+          ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'بفضل الله وبرحمته ربنا تقبل منا إنك أنت السميع العليم',
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl,
+                style: const TextStyle(
+                  color: Color(0xFF10B981),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      builder: (context, c, isAr, isDark) {
+        final app = AppState.instance;
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 14),
+
+              // ── Application Preferences Card ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.035),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                            alpha: isDark ? 0.25 : 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // 1. Language
+                      SettingTile(
+                        icon: Icons.language_rounded,
+                        title: app.isIndonesian ? 'Bahasa' : 'Language',
+                        c: c,
+                        trailing: AppSegmentedPillSelector(
+                          labels: const ['Indonesia', 'English'],
+                          selected: app.lang == AppLanguage.id ? 0 : 1,
+                          c: c,
+                          onSelected: (i) {
+                            app.setLanguage(i == 0 ? AppLanguage.id : AppLanguage.en);
+                          },
+                        ),
+                      ),
+                      SettingDivider(c: c),
+
+                      // 2. Theme
+                      SettingTile(
+                        icon: Icons.palette_rounded,
+                        title: app.isIndonesian ? 'Tema' : 'Theme',
+                        c: c,
+                        trailing: AppSegmentedPillSelector(
+                          labels: app.isIndonesian
+                              ? const ['Terang', 'Gelap']
+                              : const ['Light', 'Dark'],
+                          selected: app.theme.index,
+                          c: c,
+                          onSelected: (i) =>
+                              app.setTheme(AppTheme.values[i]),
+                        ),
+                      ),
+                      SettingDivider(c: c),
+
+                      // 3. Offline Audio & Timing Download
+                      QuranDownloadTile(c: c, isAr: isAr, isDark: isDark),
+
+                      // 4. Sliders in reading mode
+                      if (!app.isMushafMode) ...[
+                        SettingDivider(c: c),
+                        FontSliderTile(c: c, app: app, isAr: isAr),
+                        SettingDivider(c: c),
+                        AutoScrollSliderTile(c: c, app: app, isAr: isAr),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Bottom Action Buttons (How to Use & Reset - Single Line Guaranteed) ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 1. How to Use
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            DialogService.showAppGuide(context);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.help_outline_rounded,
+                                  size: 13,
+                                  color: c.textSecondary.withValues(alpha: 0.65),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  app.isIndonesian
+                                      ? 'Panduan Penggunaan'
+                                      : 'How to Use',
+                                  style: TextStyle(
+                                    color: c.textSecondary.withValues(alpha: 0.70),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      Container(
+                        width: 3,
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: c.textSecondary.withValues(alpha: 0.35),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+
+                      // 2. Reset to Default Settings
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () async {
+                            final prefs =
+                                await SharedPreferences.getInstance();
+                            final savedSurah = prefs.getInt('last_surah');
+                            final savedAyah = prefs.getInt('last_ayah');
+                            await prefs.clear();
+                            if (savedSurah != null) {
+                              await prefs.setInt('last_surah', savedSurah);
+                            }
+                            if (savedAyah != null) {
+                              await prefs.setInt('last_ayah', savedAyah);
+                            }
+                            if (context.mounted) {
+                              await app.load();
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                app.showSettingsResetBanner();
+                              }
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.refresh_rounded,
+                                  size: 13,
+                                  color:
+                                      c.textSecondary.withValues(alpha: 0.65),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  app.isIndonesian
+                                      ? 'Atur Ulang Pengaturan'
+                                      : 'Reset Settings',
+                                  style: TextStyle(
+                                    color: c.textSecondary
+                                        .withValues(alpha: 0.70),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. FONT SIZE & AUTO-SCROLL SLIDERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+class FontSliderTile extends StatefulWidget {
+  final ThemeColors c;
+  final AppState app;
+  final bool isAr;
+
+  const FontSliderTile({
+    super.key,
+    required this.c,
+    required this.app,
+    required this.isAr,
+  });
+
+  @override
+  State<FontSliderTile> createState() => _FontSliderTileState();
+}
+
+class _FontSliderTileState extends State<FontSliderTile> {
+  late double _localSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _localSize = widget.app.fontSize;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final app = widget.app;
+    final isDark = app.isDarkMode;
+
+    return SettingTile(
+      iconWidget: const Center(
+        child: Text(
+          'Aa',
+          style: TextStyle(
+            color: Color(0xFF10B981),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ),
+      title: app.isIndonesian ? 'Ukuran Font' : 'Font Size',
+      c: c,
+      trailing: Row(
+        children: [
+          Text(
+            'أ',
+            style: TextStyle(
+              fontFamily: 'HafsSmart',
+              color: c.muted,
+              fontSize: 12,
+            ),
+          ),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 7,
+                ),
+                overlayShape: const RoundSliderOverlayShape(
+                  overlayRadius: 14,
+                ),
+                trackHeight: 4,
+                activeTrackColor: const Color(0xFF10B981),
+                inactiveTrackColor: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.08),
+                thumbColor: const Color(0xFF10B981),
+                overlayColor: const Color(0xFF10B981).withValues(alpha: 0.15),
+              ),
+              child: Slider(
+                value: _localSize,
+                min: 16.0,
+                max: 42.0,
+                onChanged: (v) {
+                  setState(() => _localSize = v);
+                  app.setFontSize(v);
+                },
+                onChangeEnd: (v) {
+                  app.setFontSize(v, persistImmediately: true);
+                },
+              ),
+            ),
+          ),
+          Text(
+            'أ',
+            style: TextStyle(
+              fontFamily: 'HafsSmart',
+              color: c.muted,
+              fontSize: 22,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AutoScrollSliderTile extends StatefulWidget {
+  final ThemeColors c;
+  final AppState app;
+  final bool isAr;
+
+  const AutoScrollSliderTile({
+    super.key,
+    required this.c,
+    required this.app,
+    required this.isAr,
+  });
+
+  @override
+  State<AutoScrollSliderTile> createState() => _AutoScrollSliderTileState();
+}
+
+class _AutoScrollSliderTileState extends State<AutoScrollSliderTile> {
+  late double _localSpeed;
+
+  @override
+  void initState() {
+    super.initState();
+    _localSpeed = widget.app.autoScrollSpeed.toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final app = widget.app;
+    final isDark = app.isDarkMode;
+    final labels = AppState.speedLabels;
+
+    return SettingTile(
+      icon: Icons.speed_rounded,
+      title: app.isIndonesian ? 'Kecepatan Gulir' : 'Auto-Scroll Speed',
+      c: c,
+      trailing: Text(
+        labels[_localSpeed.toInt()],
+        style: const TextStyle(
+          color: Color(0xFF10B981),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      bottom: SliderTheme(
+        data: SliderThemeData(
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          trackHeight: 4,
+          activeTrackColor: const Color(0xFF10B981),
+          inactiveTrackColor: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.08),
+          thumbColor: const Color(0xFF10B981),
+          overlayColor: const Color(0xFF10B981).withValues(alpha: 0.15),
+          tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2),
+          activeTickMarkColor: Colors.white,
+          inactiveTickMarkColor: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.12),
+        ),
+        child: Slider(
+          value: _localSpeed,
+          min: 0,
+          max: (labels.length - 1).toDouble(),
+          divisions: labels.length - 1,
+          label: labels[_localSpeed.toInt()],
+          onChanged: (v) {
+            setState(() => _localSpeed = v);
+          },
+          onChangeEnd: (v) {
+            app.setAutoScrollSpeed(v.toInt());
+          },
+        ),
+      ),
+    );
+  }
+}
