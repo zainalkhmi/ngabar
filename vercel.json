@@ -1,5 +1,7 @@
 {
+  "buildCommand": "bash build.sh",
   "outputDirectory": "build/web",
+  "framework": null,
   "cleanUrls": true,
   "headers": [
     {
@@ -57,7 +59,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!.*\\..*).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

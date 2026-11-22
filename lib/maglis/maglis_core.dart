@@ -696,7 +696,7 @@ enum MaglisJoinResult {
 
 class MaglisPlatform {
   static const MethodChannel _serviceChannel =
-      MethodChannel('com.recitequran.app/maglis_service');
+      MethodChannel('com.ngabar.app/maglis_service');
   static StreamSubscription? _deviceChangeSub;
   static StreamSubscription? _becomingNoisySub;
   static StreamSubscription? _interruptionSub;

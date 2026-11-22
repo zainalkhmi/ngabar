@@ -57,7 +57,7 @@ class TrackingScreen extends StatefulWidget {
 class _TrackingScreenState extends State<TrackingScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   static const MethodChannel _lifecycleChannel =
-      MethodChannel('com.recitequran.app/audio_lifecycle');
+      MethodChannel('com.ngabar.app/audio_lifecycle');
 
   final ValueNotifier<String> _voiceSearchNotifier = ValueNotifier('');
   final GlobalKey<VerseListViewState> _verseListKey =

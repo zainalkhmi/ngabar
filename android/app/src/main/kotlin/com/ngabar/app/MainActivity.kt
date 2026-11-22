@@ -1,4 +1,4 @@
-package com.recitequran.app
+package com.ngabar.app
 
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
@@ -23,9 +23,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.recitequran.app/playstore"
-    private val MAGLIS_SERVICE_CHANNEL = "com.recitequran.app/maglis_service"
-    private val LIFECYCLE_CHANNEL = "com.recitequran.app/audio_lifecycle"
+    private val CHANNEL = "com.ngabar.app/playstore"
+    private val MAGLIS_SERVICE_CHANNEL = "com.ngabar.app/maglis_service"
+    private val LIFECYCLE_CHANNEL = "com.ngabar.app/audio_lifecycle"
 
     private var isScreenOff = false
 

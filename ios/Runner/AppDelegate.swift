@@ -12,7 +12,7 @@ import UIKit
 
     if let controller = window?.rootViewController as? FlutterViewController {
       let storageChannel = FlutterMethodChannel(
-        name: "com.recitequran.app/storage",
+        name: "com.ngabar.app/storage",
         binaryMessenger: controller.binaryMessenger
       )
       storageChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
@@ -34,7 +34,7 @@ import UIKit
       }
 
       let lifecycleChannel = FlutterMethodChannel(
-        name: "com.recitequran.app/audio_lifecycle",
+        name: "com.ngabar.app/audio_lifecycle",
         binaryMessenger: controller.binaryMessenger
       )
       lifecycleChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in

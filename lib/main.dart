@@ -484,7 +484,7 @@ class _OrchestratorState extends State<_Orchestrator>
   Future<void> _checkForUpdates() async {
     if (!PlatformCapabilities.isAndroid) return;
     try {
-      const platform = MethodChannel('com.recitequran.app/playstore');
+      const platform = MethodChannel('com.ngabar.app/playstore');
       final bool hasPlayStore =
           await platform.invokeMethod('isPlayStoreInstalled');
 

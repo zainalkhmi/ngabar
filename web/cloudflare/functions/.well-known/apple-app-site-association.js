@@ -4,7 +4,7 @@ export async function onRequest() {
       "apps": [],
       "details": [
         {
-          "appID": "ZKQ5264RUS.com.recitequran.app",
+          "appID": "ZKQ5264RUS.com.ngabar.app",
           "paths": ["/m/*", "/[0-9][0-9][0-9][0-9][0-9]"],
           "components": [
             {

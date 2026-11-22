@@ -13,7 +13,7 @@
 	<string>manual</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.recitequran.app</key>
+		<key>com.ngabar.app</key>
 		<string>ReciteQuran AppStore</string>
 	</dict>
 	<key>uploadSymbols</key>

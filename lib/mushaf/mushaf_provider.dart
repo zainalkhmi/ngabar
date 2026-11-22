@@ -187,7 +187,7 @@ class MushafProvider {
         _extractedPagesPath = dir.path;
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
           try {
-            const MethodChannel('com.recitequran.app/storage')
+            const MethodChannel('com.ngabar.app/storage')
                 .invokeMethod('excludeFromBackup', {'path': dir.path});
           } catch (_) {}
         }
@@ -210,7 +210,7 @@ class MushafProvider {
       _extractedPagesPath = targetPath;
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         try {
-          const MethodChannel('com.recitequran.app/storage')
+          const MethodChannel('com.ngabar.app/storage')
               .invokeMethod('excludeFromBackup', {'path': targetPath});
         } catch (_) {}
       }

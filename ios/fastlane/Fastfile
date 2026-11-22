@@ -27,7 +27,7 @@ require "securerandom"
 IOS_DIR    = File.expand_path("..", __dir__)        # <repo>/ios
 ROOT       = File.expand_path("../..", __dir__)     # <repo> root
 TEAM_ID    = "ZKQ5264RUS"
-BUNDLE_ID  = "com.recitequran.app"
+BUNDLE_ID  = "com.ngabar.app"
 APP_NAME   = "Recite Quran - اتلو القران"
 
 ASC_KEY_ID    = "ZJUS9VF3D6"

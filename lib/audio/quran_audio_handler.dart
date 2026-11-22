@@ -43,7 +43,7 @@ class QuranAudioHandler extends BaseAudioHandler
       await AudioService.init(
         builder: () => instance,
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.recitequran.app.audio',
+          androidNotificationChannelId: 'com.ngabar.app.audio',
           androidNotificationChannelName: 'القران العظيم',
           androidNotificationOngoing: false,
           androidStopForegroundOnPause: true,

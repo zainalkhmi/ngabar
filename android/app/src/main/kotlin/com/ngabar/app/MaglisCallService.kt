@@ -1,4 +1,4 @@
-package com.recitequran.app
+package com.ngabar.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

@@ -12,12 +12,12 @@ export async function onRequest(context) {
   const title = `مجلس تلاوة القرآن العظيم • رمز ${code}`;
   const desc = 'مجلس تلاوة القرآن العظيم في تطبيق اتلو القران - Recite Quran.';
   const appSchemeUrl = `natlu://maglis/${code}`;
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.recitequran.app';
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.ngabar.app';
   const appStoreUrl = 'https://apps.apple.com/app/id6806614841';
   const webAppUrl = `https://natlu.pages.dev/#/${code}`;
   
   // Telegram-style Android Intent URI: forces native app launch or falls back to Play Store
-  const androidIntentUrl = `intent://maglis/${code}#Intent;scheme=natlu;package=com.recitequran.app;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.recitequran.app;end`;
+  const androidIntentUrl = `intent://maglis/${code}#Intent;scheme=natlu;package=com.ngabar.app;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.ngabar.app;end`;
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">

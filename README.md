@@ -9,7 +9,7 @@
 <br/>
 
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=com.recitequran.app" target="_blank">
+  <a href="https://play.google.com/store/apps/details?id=com.ngabar.app" target="_blank">
     <img src="https://raw.githubusercontent.com/Recite-Quran/Natlu/refs/heads/ReciteQuran-%D8%A7%D9%84%D8%AD%D9%85%D8%AF%D9%84%D9%84%D9%87/docs/badges/google_play.svg" height="34" alt="Get it on Google Play" />
   </a>
   &nbsp;&nbsp;

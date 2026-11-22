@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.recitequran.app"
+    namespace = "com.ngabar.app"
     compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
@@ -25,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.recitequran.app"
+        applicationId = "com.ngabar.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
