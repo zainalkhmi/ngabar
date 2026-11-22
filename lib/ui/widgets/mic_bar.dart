@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/platform_utils.dart';
 import '../../core/app_state.dart';
 import '../../maglis/maglis_core.dart';
+import '../../audio/quran_audio_service.dart';
 
 enum MicBarMode { recording, maglis, normal }
 
@@ -19,6 +20,8 @@ class BottomActionBar extends StatelessWidget {
   final String surahName;
   final VoidCallback onSurahTap;
   final VoidCallback onSettingsTap;
+  final VoidCallback? onWearableTap;
+  final VoidCallback? onPlayReciteTap;
   final bool isInMaglis;
   final VoidCallback? onMaglisTap;
   final VoidCallback? onMaglisExitTap;
@@ -39,6 +42,8 @@ class BottomActionBar extends StatelessWidget {
     required this.surahName,
     required this.onSurahTap,
     required this.onSettingsTap,
+    this.onWearableTap,
+    this.onPlayReciteTap,
     this.isInMaglis = false,
     this.onMaglisTap,
     this.onMaglisExitTap,
@@ -395,6 +400,52 @@ class BottomActionBar extends StatelessWidget {
                                                 dockHeight: dockHeight,
                                               ),
                                             ),
+                                            if (onPlayReciteTap != null) ...[
+                                              SizedBox(width: gap),
+                                              ListenableBuilder(
+                                                listenable: QuranAudioService.instance.isPlayingNotifier,
+                                                builder: (context, _) {
+                                                  final isPlaying = QuranAudioService.instance.isPlayingNotifier.value;
+                                                  return _buildActionButton(
+                                                    child: Icon(
+                                                      isPlaying
+                                                          ? Icons.pause_circle_filled_rounded
+                                                          : Icons.play_circle_filled_rounded,
+                                                      size: 19.5,
+                                                      color: isPlaying
+                                                          ? const Color(0xFF10B981)
+                                                          : _btnFg(isDark),
+                                                    ),
+                                                    tooltip: isPlaying
+                                                        ? 'Jeda Murottal'
+                                                        : 'Putar Murottal',
+                                                    isActive: isPlaying,
+                                                    isDark: isDark,
+                                                    width: stdBtnWidth,
+                                                    height: btnHeight,
+                                                    dockHeight: dockHeight,
+                                                    onTap: onPlayReciteTap!,
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                            if (onWearableTap != null) ...[
+                                              SizedBox(width: gap),
+                                              _buildActionButton(
+                                                child: Icon(
+                                                  Icons.watch_rounded,
+                                                  size: 18.5,
+                                                  color: _btnFg(isDark),
+                                                ),
+                                                tooltip: 'Smartwatch / Wearable',
+                                                isActive: false,
+                                                isDark: isDark,
+                                                width: stdBtnWidth,
+                                                height: btnHeight,
+                                                dockHeight: dockHeight,
+                                                onTap: onWearableTap!,
+                                              ),
+                                            ],
                                             SizedBox(width: gap),
                                             _buildActionButton(
                                               child: Icon(
@@ -544,10 +595,25 @@ class BottomActionBar extends StatelessWidget {
               )
             : (isRecording
                 ? const _AudioWaveform()
-                : const Icon(
-                    Icons.mic_rounded,
-                    color: Colors.white,
-                    size: 25.5,
+                : const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.mic_rounded,
+                        color: Colors.white,
+                        size: 23.5,
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 7.0,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   )),
       ),
     );
@@ -1222,14 +1288,36 @@ class _AudioWaveformState extends State<_AudioWaveform>
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: SizedBox(
-        width: 22,
-        height: 18,
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (context, _) =>
-              CustomPaint(painter: _WaveformPainter(_ctrl.value)),
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 22,
+            height: 14,
+            child: AnimatedBuilder(
+              animation: _ctrl,
+              builder: (context, _) =>
+                  CustomPaint(painter: _WaveformPainter(_ctrl.value)),
+            ),
+          ),
+          const SizedBox(height: 1.5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.8),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'AI ON',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 6.8,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

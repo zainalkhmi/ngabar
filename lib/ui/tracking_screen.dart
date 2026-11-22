@@ -451,6 +451,23 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 onSettingsTap: () {
                                   _showSettingsDialog();
                                 },
+                                onWearableTap: () {
+                                  DialogService.showWearable(context);
+                                },
+                                onPlayReciteTap: () async {
+                                  final player = QuranAudioService.instance;
+                                  if (player.isPlayingNotifier.value) {
+                                    await player.pause();
+                                  } else {
+                                    final curSurah = effectiveSurah;
+                                    final curAyah = widget.controller.activeAyah.value ?? app.lastAyah;
+                                    await player.play(
+                                      surah: curSurah,
+                                      ayah: curAyah,
+                                      continuous: true,
+                                    );
+                                  }
+                                },
                                 isInMaglis: maglis.inSession,
                                 maglisRoomCode: maglis.roomCode,
                                 maglisPeerCount: peerCount,
