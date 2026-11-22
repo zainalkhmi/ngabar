@@ -62,6 +62,7 @@ flutter:
     - assets/model/zipformer_p_arabic_v3.int8.onnx
     - assets/icon/app_icon.png
     - assets/qris.png
+    - assets/qris.jpg
     - assets/pages.tar.xz
     - assets/audio_timings/husary/
 
