@@ -344,7 +344,51 @@ class SettingsSheet extends StatelessWidget {
                       // 3. Offline Audio & Timing Download
                       QuranDownloadTile(c: c, isAr: isAr, isDark: isDark),
 
-                      // 4. Sliders in reading mode
+                      // 4. Dukung Pengembangan Aplikasi
+                      SettingDivider(c: c),
+                      SettingTile(
+                        icon: Icons.volunteer_activism_rounded,
+                        title: 'Dukung Pengembangan Aplikasi',
+                        c: c,
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: isDark ? 0.20 : 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: isDark ? 0.40 : 0.25),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'QRIS',
+                                style: TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 10.5,
+                                color: Color(0xFF10B981),
+                              ),
+                            ],
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          DialogService.showDonation(context);
+                        },
+                      ),
+
+                      // 5. Sliders in reading mode
                       if (!app.isMushafMode) ...[
                         SettingDivider(c: c),
                         FontSliderTile(c: c, app: app, isAr: isAr),
@@ -368,7 +412,53 @@ class SettingsSheet extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 1. How to Use
+                      // 1. Dukung Aplikasi
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            DialogService.showDonation(context);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.volunteer_activism_rounded,
+                                  size: 13,
+                                  color: Color(0xFF10B981),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Dukung Aplikasi',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      Container(
+                        width: 3,
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: c.textSecondary.withValues(alpha: 0.35),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+
+                      // 2. How to Use
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -416,7 +506,7 @@ class SettingsSheet extends StatelessWidget {
                         ),
                       ),
 
-                      // 2. Reset to Default Settings
+                      // 3. Reset to Default Settings
                       Material(
                         color: Colors.transparent,
                         child: InkWell(

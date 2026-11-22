@@ -45,7 +45,9 @@ class ModelAssetManager {
       // Clean up legacy stale .tmp file if any was left behind
       final legacyTmp = File('${targetModelFile.path}.tmp');
       if (await legacyTmp.exists()) {
-        await legacyTmp.delete().catchError((_) {});
+        try {
+          await legacyTmp.delete();
+        } catch (_) {}
       }
 
       // 1. Verify model file
@@ -56,7 +58,9 @@ class ModelAssetManager {
           modelReady = true;
         } else {
           // Incomplete or corrupt file from previous aborted write
-          await targetModelFile.delete().catchError((_) {});
+          try {
+            await targetModelFile.delete();
+          } catch (_) {}
         }
       }
 
@@ -78,7 +82,9 @@ class ModelAssetManager {
         // Validate length before atomic rename
         final writtenLen = await uniqueTmp.length();
         if (writtenLen != bytes.length) {
-          await uniqueTmp.delete().catchError((_) {});
+          try {
+            await uniqueTmp.delete();
+          } catch (_) {}
           throw Exception('Model write failed: expected ${bytes.length} bytes, got $writtenLen');
         }
 
@@ -94,7 +100,9 @@ class ModelAssetManager {
         if (len > 100) {
           tokensReady = true;
         } else {
-          await targetTokensFile.delete().catchError((_) {});
+          try {
+            await targetTokensFile.delete();
+          } catch (_) {}
         }
       }
 
