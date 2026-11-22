@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../audio/quran_download_service.dart';
+import '../../../audio/quran_audio_service.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
 import 'dialog_service.dart';
@@ -388,7 +389,91 @@ class SettingsSheet extends StatelessWidget {
                         },
                       ),
 
-                      // 5. Sliders in reading mode
+                      // 5. Perangkat Smartwatch / Wearable
+                      SettingDivider(c: c),
+                      SettingTile(
+                        icon: Icons.watch_rounded,
+                        title: 'Koneksi Smartwatch / Wearable',
+                        c: c,
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 15,
+                          color: Color(0xFF10B981),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          DialogService.showWearable(context);
+                        },
+                      ),
+
+                      // 6. Recite Player (Murottal Audio Tilawah)
+                      SettingDivider(c: c),
+                      ListenableBuilder(
+                        listenable: QuranAudioService.instance.isPlayingNotifier,
+                        builder: (context, _) {
+                          final isPlaying =
+                              QuranAudioService.instance.isPlayingNotifier.value;
+                          return SettingTile(
+                            icon: isPlaying
+                                ? Icons.pause_circle_rounded
+                                : Icons.play_circle_fill_rounded,
+                            title: 'Recite Player (Murottal)',
+                            c: c,
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(
+                                    alpha: isDark ? 0.20 : 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981).withValues(
+                                      alpha: isDark ? 0.40 : 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isPlaying
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
+                                    size: 14,
+                                    color: const Color(0xFF10B981),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isPlaying ? 'Jeda' : 'Putar',
+                                    style: const TextStyle(
+                                      color: Color(0xFF10B981),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            onTap: () async {
+                              final player = QuranAudioService.instance;
+                              if (player.isPlayingNotifier.value) {
+                                await player.pause();
+                              } else {
+                                final curSurah =
+                                    AppState.instance.lastSurah;
+                                final curAyah =
+                                    AppState.instance.lastAyah;
+                                await player.play(
+                                  surah: curSurah,
+                                  ayah: curAyah,
+                                  continuous: true,
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+
+                      // 7. Sliders in reading mode
                       if (!app.isMushafMode) ...[
                         SettingDivider(c: c),
                         FontSliderTile(c: c, app: app, isAr: isAr),
@@ -458,7 +543,53 @@ class SettingsSheet extends StatelessWidget {
                         ),
                       ),
 
-                      // 2. How to Use
+                      // 2. Smartwatch / Wearable
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            DialogService.showWearable(context);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.watch_rounded,
+                                  size: 13,
+                                  color: Color(0xFF10B981),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Smartwatch',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      Container(
+                        width: 3,
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: c.textSecondary.withValues(alpha: 0.35),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+
+                      // 3. How to Use
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
