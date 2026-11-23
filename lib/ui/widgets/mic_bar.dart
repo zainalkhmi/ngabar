@@ -7,7 +7,7 @@ import '../../maglis/maglis_core.dart';
 import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 
-enum MicBarMode { recording, maglis, normal }
+enum MicBarMode { recording, maglis, maglisRecording, normal }
 
 class BottomActionBar extends StatelessWidget {
   final bool isRecording;
@@ -54,7 +54,7 @@ class BottomActionBar extends StatelessWidget {
   });
 
   MicBarMode get mode => isInMaglis
-      ? MicBarMode.maglis
+      ? (isRecording ? MicBarMode.maglisRecording : MicBarMode.maglis)
       : (isRecording ? MicBarMode.recording : MicBarMode.normal);
 
   static Color _btnBg(bool isDark, {bool isActive = false}) => isActive
@@ -117,18 +117,18 @@ class BottomActionBar extends StatelessWidget {
 
             final double targetWidth = switch (mode) {
               MicBarMode.recording => recordingWidth,
-              MicBarMode.maglis => maglisWidth,
+              MicBarMode.maglis || MicBarMode.maglisRecording => maglisWidth,
               MicBarMode.normal => normalWidth,
             };
 
             final double normalRightMargin =
                 math.max(10.0, (maxW - normalWidth) / 2.0);
             final double rightMargin =
-                mode == MicBarMode.maglis ? 8.0 : normalRightMargin;
+                (mode == MicBarMode.maglis || mode == MicBarMode.maglisRecording) ? 8.0 : normalRightMargin;
 
             final double minNormalActionWidth =
                 (stdBtnWidth * 2.0) + (gap * 2.0) + 68.0;
-            const double minMaglisActionWidth = 145.0;
+            const double minMaglisActionWidth = 220.0;
 
             final Color pillBg =
                 isDark ? const Color(0xF40F151D) : const Color(0xFAFFFFFF);
@@ -192,7 +192,7 @@ class BottomActionBar extends StatelessWidget {
                               ),
                               SizedBox(
                                 width:
-                                    mode == MicBarMode.maglis ? maglisGap : gap,
+                                    (mode == MicBarMode.maglis || mode == MicBarMode.maglisRecording) ? maglisGap : gap,
                               ),
                               Expanded(
                                 child: AnimatedSwitcher(
@@ -273,8 +273,9 @@ class BottomActionBar extends StatelessWidget {
                                         ),
                                       ),
 
-                                    // CASE 2: MAGLIS SESSION
-                                    MicBarMode.maglis =>
+                                    // CASE 2: MAGLIS SESSION (Idle or Local Reciting)
+                                    MicBarMode.maglis ||
+                                    MicBarMode.maglisRecording =>
                                       _NonOverflowingActionRow(
                                         key: const ValueKey('mode_maglis'),
                                         minWidth: minMaglisActionWidth,
@@ -418,32 +419,32 @@ class BottomActionBar extends StatelessWidget {
                                               animation: MaglisController.instance,
                                               builder: (context, _) {
                                                 final maglis = MaglisController.instance;
-                                                final bool canPass = maglis.isLocalReciting || (maglis.isHost && maglis.tadarusQueue.isNotEmpty);
+                                                final bool canPass = isRecording ||
+                                                    maglis.isLocalReciting ||
+                                                    (maglis.isHost && maglis.tadarusQueue.isNotEmpty);
                                                 if (!canPass) return const SizedBox.shrink();
 
-                                                return Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Expanded(
-                                                      flex: 10,
-                                                      child: _buildActionButton(
-                                                        child: const Icon(
-                                                          Icons.skip_next_rounded,
-                                                          size: 20.0,
-                                                          color: Color(0xFF10B981),
-                                                        ),
-                                                        tooltip: app.isIndonesian ? 'Oper Giliran Membaca' : 'Pass Turn to Next',
-                                                        isActive: true,
-                                                        isDark: isDark,
-                                                        height: btnHeight,
-                                                        dockHeight: dockHeight,
-                                                        onTap: () {
-                                                          maglis.passTurnToNext();
-                                                        },
-                                                      ),
+                                                return Container(
+                                                  width: stdBtnWidth,
+                                                  margin: EdgeInsets.only(left: maglisGap),
+                                                  child: _buildActionButton(
+                                                    child: const Icon(
+                                                      Icons.skip_next_rounded,
+                                                      size: 20.0,
+                                                      color: Color(0xFF10B981),
                                                     ),
-                                                    SizedBox(width: maglisGap),
-                                                  ],
+                                                    tooltip: app.isIndonesian
+                                                        ? 'Oper Giliran Membaca'
+                                                        : (isAr ? 'تمرير الدور للتالي' : 'Pass Turn to Next'),
+                                                    isActive: true,
+                                                    isDark: isDark,
+                                                    width: stdBtnWidth,
+                                                    height: btnHeight,
+                                                    dockHeight: dockHeight,
+                                                    onTap: () {
+                                                      maglis.passTurnToNext();
+                                                    },
+                                                  ),
                                                 );
                                               },
                                             ),
