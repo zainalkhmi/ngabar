@@ -389,24 +389,7 @@ class SettingsSheet extends StatelessWidget {
                         },
                       ),
 
-                      // 5. Perangkat Smartwatch / Wearable
-                      SettingDivider(c: c),
-                      SettingTile(
-                        icon: Icons.watch_rounded,
-                        title: 'Koneksi Smartwatch / Wearable',
-                        c: c,
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 15,
-                          color: Color(0xFF10B981),
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          DialogService.showWearable(context);
-                        },
-                      ),
-
-                      // 6. Recite Player (Murottal Audio Tilawah)
+                      // 5. Recite Player (Murottal Audio Tilawah)
                       SettingDivider(c: c),
                       ListenableBuilder(
                         listenable: QuranAudioService.instance.isPlayingNotifier,

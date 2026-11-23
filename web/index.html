@@ -46,9 +46,8 @@
   <title>ngabar</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Preload critical Web bootstrap & font resources -->
+  <!-- Preload critical Web bootstrap resources -->
   <link rel="preload" href="flutter_bootstrap.js" as="script">
-  <link rel="preload" href="assets/assets/fonts/Cairo-Regular.ttf" as="font" type="font/ttf" crossorigin>
 
   <style>
     html,
@@ -166,7 +165,7 @@
       if (!window.registerAppServiceWorker && 'serviceWorker' in navigator) {
         window.registerAppServiceWorker = function () {
           navigator.serviceWorker.register('sw.js')
-            .then((reg) => { if (navigator.onLine) reg.update().catch(() => {}); })
+            .then((reg) => { if (navigator.onLine) reg.update().catch(() => { }); })
             .catch((err) => console.warn('[PWA] ServiceWorker error:', err));
         };
       }

@@ -1,8 +1,8 @@
-// Service Worker for Recite Quran (اتلو القران)
+// Service Worker for ngabar
 // Provides complete offline caching, dynamic caching, and Cross-Origin Isolation (COOP/COEP) for WebAssembly.
 
-const CACHE_NAME = 'recite-quran-pwa-v22-1793586920';
-const PERMANENT_CACHE_NAME = 'recite-quran-permanent-assets';
+const CACHE_NAME = 'ngabar-pwa-v1.0.2';
+const PERMANENT_CACHE_NAME = 'ngabar-permanent-assets';
 
 const STATIC_PRECACHE = [
   './',
@@ -35,14 +35,12 @@ const STATIC_PRECACHE = [
   'assets/assets/fonts/Cairo-SemiBold.ttf',
   'assets/assets/fonts/Cairo-Bold.ttf',
   'assets/assets/fonts/HafsSmart_08.ttf',
-  'assets/fonts/HafsSmart_08.ttf',
   'assets/fonts/MaterialIcons-Regular.otf',
   'assets/assets/icon/app_icon.png',
   'assets/packages/recite_quran/assets/model/tokens.txt',
   'assets/packages/recite_quran/assets/json/riwayat.json',
   'assets/packages/qvp_flutter/assets/wasm/qvp_ffi.wasm',
   'assets/packages/record_web/assets/js/record.worklet.js',
-  'assets/packages/wakelock_plus/assets/no_sleep.js',
   'assets/shaders/ink_sparkle.frag',
   'assets/shaders/stretch_effect.frag'
 ];
