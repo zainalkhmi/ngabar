@@ -1,7 +1,7 @@
 // Service Worker for ngabar
 // Provides complete offline caching, dynamic caching, and Cross-Origin Isolation (COOP/COEP) for WebAssembly.
 
-const CACHE_NAME = 'ngabar-pwa-v1.0.2';
+const CACHE_NAME = 'ngabar-pwa-v1.3.0';
 const PERMANENT_CACHE_NAME = 'ngabar-permanent-assets';
 
 const STATIC_PRECACHE = [

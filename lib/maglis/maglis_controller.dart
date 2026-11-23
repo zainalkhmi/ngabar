@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../core/highlighting_controller.dart';
 import '../core/app_state.dart';
@@ -123,7 +124,11 @@ class MaglisController extends ChangeNotifier {
       ts: ts,
     ));
     if (s.isLocalReciting) {
-      releaseFloor();
+      releaseFloor(
+        page: s.remotePage,
+        surah: s.remoteSurah,
+        ayah: s.remoteAyah,
+      );
     }
     notifyListeners();
   }

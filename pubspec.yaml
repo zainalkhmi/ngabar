@@ -1,7 +1,7 @@
 name: the_great_quran
 description: "ngabar — Real-time recitation tracker"
 publish_to: 'none'
-version: 1.2.0+24
+version: 1.3.0+25
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
