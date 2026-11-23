@@ -329,23 +329,30 @@ class _OrchestratorState extends State<_Orchestrator>
   }
 
   void _setupEngineSubscriptions() {
-    _voiceSearchCtrl = VoiceSearchController(engine: _engine);
+    _voiceSearchCtrl = VoiceSearchController(
+      engine: _engine,
+      repository: _repo,
+    );
     _transcriptionSub?.cancel();
     _transcriptionSub = _engine.transcriptionStream.listen((res) {
       if (_isVoiceSearching && !_isVoiceSearchPaused && mounted) {
-        _voiceSearchAsrNotifier.value = res.text;
+        if (res.text.isNotEmpty) {
+          _voiceSearchAsrNotifier.value = res.text;
+        }
 
         _voiceSearchCtrl.processRealtime(res.text).then((rtResult) {
           if (rtResult != null) {
             _stopVoiceSearch(precalculatedResult: rtResult);
           } else if (res.isFinal && _isVoiceSearching) {
             final current = _voiceSearchCtrl.currentResult.value;
-            if (current == null || !current.hasCandidates) {
-              DebugLogger.log(
-                'VoiceSearch',
-                'Auto-stopping on VAD endpoint (no matches found)',
-              );
-              _stopVoiceSearch();
+            // Only finalize on VAD silence if the user actually recited something
+            if (res.text.trim().isNotEmpty &&
+                (current == null || !current.hasCandidates)) {
+              _voiceSearchCtrl.stopSearch(res.text).then((finalResult) {
+                if (finalResult != null) {
+                  _stopVoiceSearch(precalculatedResult: finalResult);
+                }
+              });
             }
           }
         });
@@ -1226,6 +1233,11 @@ class _OrchestratorState extends State<_Orchestrator>
       // Suspend highlighting controller so it doesn't consume/reset the engine buffer!
       _ctrl?.finalize();
 
+      // Ensure voice search repository is wired
+      if (_voiceSearchCtrl.repository == null && _repo != null) {
+        _voiceSearchCtrl.repository = _repo;
+      }
+
       // SHOW UI IMMEDIATELY!
       if (mounted) {
         setState(() {
@@ -1237,16 +1249,13 @@ class _OrchestratorState extends State<_Orchestrator>
       await _voiceSearchCtrl.startSearch();
 
       _isVoiceSearchPaused = false;
-      _audio.start(
+      await _audio.start(
         onChunk: (chunk, isFinal) {
           if (!_isVoiceSearchPaused) {
             _engine.transcribe(chunk, isFinal: isFinal);
           }
         },
-      ).catchError((e) {
-        DebugLogger.logSimple('AUDIO', '❌ ERROR in Voice Search: $e');
-        if (mounted) setState(() => _isVoiceSearching = false);
-      });
+      );
     } catch (e) {
       DebugLogger.logSimple('VOICE_SEARCH', '❌ START ERROR: $e');
       if (mounted) setState(() => _isVoiceSearching = false);

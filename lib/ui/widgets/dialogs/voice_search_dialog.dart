@@ -227,8 +227,9 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
+    final app = AppState.instance;
     final c = app.colors;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final isDark = app.isDarkMode;
     final size = MediaQuery.sizeOf(context);
 
@@ -249,17 +250,17 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
             boxShadow: DialogTokens.dialogShadow(isDark),
           ),
           child: Directionality(
-            textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+            textDirection: TextDirection.ltr,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
               child: widget.isLoading != null
                   ? ValueListenableBuilder<bool>(
                       valueListenable: widget.isLoading!,
                       builder: (_, loading, __) => loading
-                          ? _buildLoadingState(c, isAr)
-                          : _buildContent(c, isAr),
+                          ? _buildLoadingState(c, isId)
+                          : _buildContent(c, isId),
                     )
-                  : _buildContent(c, isAr),
+                  : _buildContent(c, isId),
             ),
           ),
         ),
@@ -427,35 +428,115 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
         _buildWaveBars(count: 7, baseHeight: 8, maxHeight: 26, c: c),
         const SizedBox(height: 16),
 
-        // Status badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: c.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: c.primary.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration:
-                    BoxDecoration(color: c.primary, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isId ? 'Mendengarkan lantunan suara...' : 'Listening to recitation...',
-                style: TextStyle(
-                  color: c.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+        // Status badge + Live transcribed speech display
+        if (widget.asrTextNotifier != null)
+          ValueListenableBuilder<String>(
+            valueListenable: widget.asrTextNotifier!,
+            builder: (_, asrText, __) {
+              final bool isTranscribing = asrText.trim().isNotEmpty;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: c.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border:
+                          Border.all(color: c.primary.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: isTranscribing ? c.green : c.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isTranscribing
+                              ? (isId
+                                  ? 'Mendeteksi lantunan...'
+                                  : 'Transcribing recitation...')
+                              : (isId
+                                  ? 'Mendengarkan lantunan suara...'
+                                  : 'Listening to recitation...'),
+                          style: TextStyle(
+                            color: c.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isTranscribing) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 380),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: c.surfaceHigh.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: c.primary.withValues(alpha: 0.25),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        asrText,
+                        textAlign: TextAlign.center,
+                        textDirection: TextDirection.rtl,
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: c.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: c.primary.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration:
+                      BoxDecoration(color: c.primary, shape: BoxShape.circle),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  isId
+                      ? 'Mendengarkan lantunan suara...'
+                      : 'Listening to recitation...',
+                  style: TextStyle(
+                    color: c.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -656,7 +737,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     );
   }
 
-  Widget _buildCandidatesList(ThemeColors c, bool isAr) {
+  Widget _buildCandidatesList(ThemeColors c, bool isId) {
     final candidates = _currentResult!.candidates;
 
     return Flexible(
@@ -672,7 +753,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
             match: match,
             isTop: index == 0,
             c: c,
-            isAr: isAr,
+            isId: isId,
           );
         },
       ),
@@ -684,14 +765,14 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     required AyahSearchMatch match,
     required bool isTop,
     required ThemeColors c,
-    required bool isAr,
+    required bool isId,
   }) {
     final surahMeta = MushafProvider.instance.atlas.surah(match.surah);
-    final surahTitle = isAr
-        ? (surahMeta?.arabic ?? '${match.surah}')
-        : (surahMeta?.latin.isNotEmpty == true
+    final surahTitle = isId
+        ? (surahMeta?.latin.isNotEmpty == true
             ? surahMeta!.latin
-            : (match.surahNameEn ?? '${match.surah}'));
+            : (surahMeta?.arabic ?? '${match.surah}'))
+        : (match.surahNameEn ?? surahMeta?.latin ?? '${match.surah}');
 
     return Material(
       color: Colors.transparent,
@@ -733,7 +814,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                         ),
                       ),
                       child: Text(
-                        isAr ? 'آية ${match.ayah}' : 'Ayah ${match.ayah}',
+                        isId ? 'Ayat ${match.ayah}' : 'Ayah ${match.ayah}',
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 9.5,
@@ -749,7 +830,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontWeight: FontWeight.bold,
-                        fontSize: isAr ? 13.5 : 12,
+                        fontSize: isId ? 13 : 12,
                         color: c.primary,
                       ),
                     ),
