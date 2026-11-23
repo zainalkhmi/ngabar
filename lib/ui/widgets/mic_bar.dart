@@ -915,18 +915,66 @@ class BottomActionBar extends StatelessWidget {
     required bool showNewBadge,
     required VoidCallback onTap,
   }) {
-    final btn = _buildActionButton(
-      child: _FivePersonsIcon(
-        size: 20.5,
-        isDark: isDark,
+    final isId = AppState.instance.isIndonesian;
+    final tooltip = isId ? 'Majlis Ngaji Bareng' : (isAr ? 'مجلس القرآن' : 'Quran Majlis');
+
+    final btn = Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: _TapScale(
+        onTap: onTap,
+        child: SizedBox(
+          width: width,
+          height: dockHeight,
+          child: Center(
+            child: Container(
+              width: width,
+              height: height,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? const [Color(0xFF2C2208), Color(0xFF1B1403)]
+                      : const [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+                ),
+                borderRadius: BorderRadius.circular(10.0),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35),
+                    blurRadius: 9.0,
+                    spreadRadius: 1.0,
+                    offset: const Offset(0, 1),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withValues(alpha: isDark ? 0.30 : 0.22),
+                    blurRadius: 14.0,
+                    spreadRadius: 2.0,
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6.0),
+                child: Image.asset(
+                  'assets/icon/maglis_icon.jpg',
+                  width: height - 10,
+                  height: height - 10,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _FivePersonsIcon(
+                    size: 20.5,
+                    isDark: isDark,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
-      tooltip: isAr ? 'مجلس القرآن' : 'Quran Majlis',
-      isActive: false,
-      isDark: isDark,
-      width: width,
-      height: height,
-      dockHeight: dockHeight,
-      onTap: onTap,
     );
 
     if (!showNewBadge) return btn;
@@ -946,11 +994,19 @@ class BottomActionBar extends StatelessWidget {
                 vertical: 1.5,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                ),
                 borderRadius: BorderRadius.circular(5.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                    blurRadius: 4,
+                  ),
+                ],
               ),
               child: Text(
-                isAr ? 'جديد' : 'NEW',
+                isAr ? 'جديد' : (isId ? 'BARU' : 'NEW'),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 7.5,
