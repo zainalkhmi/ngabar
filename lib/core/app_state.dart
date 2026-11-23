@@ -205,6 +205,19 @@ class AppState extends ChangeNotifier {
   int maglisCommunityTapCount = 0;
   bool get showMaglisNewBadge => maglisCommunityTapCount < 5;
 
+  String _maglisUserName = '';
+  String get maglisUserName => _maglisUserName;
+
+  Future<void> setMaglisUserName(String name) async {
+    final clean = name.trim().toUpperCase();
+    final truncated = clean.length > 4 ? clean.substring(0, 4) : clean;
+    if (_maglisUserName == truncated) return;
+    _maglisUserName = truncated;
+    notifyListeners();
+    final prefs = await _getPrefs();
+    await prefs.setString('maglis_user_name', _maglisUserName);
+  }
+
   Future<void> recordMaglisTap() async {
     if (maglisCommunityTapCount < 5) {
       maglisCommunityTapCount++;
@@ -839,6 +852,7 @@ class AppState extends ChangeNotifier {
 
       mushafAudioClickCount = prefs.getInt('mushaf_audio_click_count') ?? 0;
       maglisCommunityTapCount = prefs.getInt('maglis_community_tap_count') ?? 0;
+      _maglisUserName = prefs.getString('maglis_user_name') ?? '';
 
       final seenBanners = prefs.getStringList('seen_banner_ids');
       if (seenBanners != null) {

@@ -62,9 +62,12 @@ class MaglisController extends ChangeNotifier {
     if (trimmed.isEmpty) return;
     final ts = DateTime.now().millisecondsSinceEpoch;
     final id = '${localPeerId}_$ts';
-    final name = (senderName != null && senderName.trim().isNotEmpty)
-        ? senderName.trim()
-        : 'User ${localPeerId.substring(0, min(4, localPeerId.length))}';
+    final customName = AppState.instance.maglisUserName;
+    final name = (customName.isNotEmpty)
+        ? customName
+        : ((senderName != null && senderName.trim().isNotEmpty)
+            ? senderName.trim()
+            : 'User ${localPeerId.substring(0, min(4, localPeerId.length))}');
 
     final msg = MaglisChatMessage(
       id: id,

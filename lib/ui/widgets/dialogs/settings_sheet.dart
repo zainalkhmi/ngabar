@@ -276,6 +276,7 @@ class SettingsSheet extends StatelessWidget {
       ),
       builder: (context, c, isAr, isDark) {
         final app = AppState.instance;
+        final isId = app.isIndonesian;
         return SingleChildScrollView(
           physics: const ClampingScrollPhysics(),
           child: Column(
@@ -389,7 +390,43 @@ class SettingsSheet extends StatelessWidget {
                         },
                       ),
 
-                      // 5. Recite Player (Murottal Audio Tilawah)
+                      // 5. Nama Profil Majelis (4 Huruf - Zoom/Teams style)
+                      SettingDivider(c: c),
+                      SettingTile(
+                        icon: Icons.badge_rounded,
+                        title: isId ? 'Nama Profil Majelis' : 'Majlis Profile Name',
+                        c: c,
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: isDark ? 0.20 : 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: isDark ? 0.40 : 0.25),
+                            ),
+                          ),
+                          child: Text(
+                            app.maglisUserName.isNotEmpty
+                                ? app.maglisUserName
+                                : (isId ? 'Atur (4 Huruf)' : 'Set (4 Letters)'),
+                            style: const TextStyle(
+                              color: Color(0xFF10B981),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _showEditNameDialog(context, app, isDark, isId, c);
+                        },
+                      ),
+
+                      // 6. Recite Player (Murottal Audio Tilawah)
                       SettingDivider(c: c),
                       ListenableBuilder(
                         listenable: QuranAudioService.instance.isPlayingNotifier,
@@ -638,6 +675,131 @@ class SettingsSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  static void _showEditNameDialog(
+    BuildContext context,
+    AppState app,
+    bool isDark,
+    bool isId,
+    dynamic c,
+  ) {
+    final controller = TextEditingController(text: app.maglisUserName);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981)
+                          .withValues(alpha: isDark ? 0.20 : 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.badge_rounded,
+                        color: Color(0xFF10B981), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isId ? 'Nama Profil Majelis' : 'Majlis Display Name',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isId
+                    ? 'Nama singkat (maks. 4 huruf) yang akan ditampilkan saat bergabung di Majelis.'
+                    : 'Short display name (max 4 letters) shown to peers in Majlis.',
+                style: TextStyle(fontSize: 12, color: c.muted, height: 1.3),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 4,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.0,
+                  color: Color(0xFF10B981),
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.04),
+                  hintText: isId ? 'MISAL: ZAIN' : 'E.G. JOHN',
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF10B981), width: 1.8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text(
+                      isId ? 'Batal' : 'Cancel',
+                      style: TextStyle(color: c.muted),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      final val = controller.text.trim().toUpperCase();
+                      app.setMaglisUserName(val);
+                      Navigator.of(ctx).pop();
+                    },
+                    child: Text(
+                      isId ? 'Simpan' : 'Save',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

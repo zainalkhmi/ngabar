@@ -63,6 +63,8 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
   String _newCode = '';
   final TextEditingController _codeCtrl = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final TextEditingController _nameCtrl = TextEditingController();
+  final FocusNode _nameFocusNode = FocusNode();
   bool _canJoin = false;
   bool _isJoining = false;
   bool _isCreating = false;
@@ -72,12 +74,16 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
     super.initState();
     _selectedTab = widget.initialTab;
     _newCode = (10000 + Random().nextInt(90000)).toString();
+    _nameCtrl.text = AppState.instance.maglisUserName;
     if (widget.initialCode != null && widget.initialCode!.isNotEmpty) {
       final normalized = normalizeArabicDigits(widget.initialCode!.trim());
       _codeCtrl.text = normalized;
       _canJoin = normalized.length == 5;
     }
     _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _nameFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
   }
@@ -93,6 +99,8 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
   void dispose() {
     _codeCtrl.dispose();
     _focusNode.dispose();
+    _nameCtrl.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
   }
 
@@ -214,6 +222,11 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
 
     final app = AppState.instance;
     final codeEn = formatMaglisCode(trimmed, isArabic: false);
+
+    final typedName = _nameCtrl.text.trim().toUpperCase();
+    if (typedName.isNotEmpty) {
+      await app.setMaglisUserName(typedName);
+    }
 
     // 1. Mandatory Connectivity Pre-flight (noscall / livekit pattern)
     final connectivity = await Connectivity().checkConnectivity();
@@ -432,6 +445,9 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
                     if (!isWide)
                       const AppDragHandle(padding: EdgeInsets.only(bottom: 12)),
 
+                    // Profile Name Card (Zoom/Teams style)
+                    _buildProfileNameCard(isDark, isId, c, borderColor),
+
                     // Segmented Tab Picker with Hint Button Beside It
                     Row(
                       children: [
@@ -628,6 +644,133 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildProfileNameCard(
+      bool isDark, bool isId, dynamic c, Color borderColor) {
+    final name = _nameCtrl.text.trim().toUpperCase();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.035),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _nameFocusNode.hasFocus
+              ? const Color(0xFF10B981).withValues(alpha: 0.60)
+              : borderColor,
+          width: _nameFocusNode.hasFocus ? 1.4 : 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF10B981), Color(0xFF059669)],
+              ),
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: name.isNotEmpty
+                ? Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  )
+                : const Icon(
+                    Icons.badge_rounded,
+                    color: Colors.white,
+                    size: 17,
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isId
+                      ? 'Nama Majelis (Maks. 4 Huruf)'
+                      : 'Majlis Display Name (Max 4)',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: c.muted,
+                  ),
+                ),
+                TextField(
+                  controller: _nameCtrl,
+                  focusNode: _nameFocusNode,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 4,
+                  buildCounter: (_,
+                          {required currentLength,
+                          required isFocused,
+                          maxLength}) =>
+                      null,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.0,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                    border: InputBorder.none,
+                    hintText: isId ? 'CONTOH: ZAIN' : 'E.G. JOHN',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.0,
+                      color: c.muted.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  onChanged: (val) {
+                    final upper = val.trim().toUpperCase();
+                    AppState.instance.setMaglisUserName(upper);
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (_nameCtrl.text.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                _nameCtrl.clear();
+                AppState.instance.setMaglisUserName('');
+                setState(() {});
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: c.muted,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

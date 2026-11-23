@@ -1,11 +1,8 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
 import '../../../maglis/maglis_controller.dart';
-import '../../../maglis/maglis_core.dart';
-import 'dialog_base.dart';
 
 /// Modern tactile Chat BottomSheet / Modal for participants in a Majlis session.
 /// Sends real-time messages directly via WebRTC DataChannel without third-party servers.

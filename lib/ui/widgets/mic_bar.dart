@@ -783,6 +783,7 @@ class BottomActionBar extends StatelessWidget {
     final String countDisplay =
         formatMaglisCode(count.toString(), isArabic: isAr);
     final Color fgColor = _btnFg(isDark);
+    final String userName = AppState.instance.maglisUserName;
 
     return Tooltip(
       message:
@@ -838,10 +839,46 @@ class BottomActionBar extends StatelessWidget {
                           height: 1.05,
                         ),
                       ),
+                      if (userName.isNotEmpty) ...[
+                        Container(
+                          width: 1.0,
+                          height: 14.0,
+                          margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : Colors.black.withValues(alpha: 0.12),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4.5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: isDark ? 0.20 : 0.12),
+                            borderRadius: BorderRadius.circular(4.0),
+                            border: Border.all(
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: isDark ? 0.40 : 0.25),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            userName,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontFamily: 'cairo',
+                              color: Color(0xFF10B981),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11.5,
+                              letterSpacing: 0.8,
+                              height: 1.05,
+                            ),
+                          ),
+                        ),
+                      ],
                       Container(
                         width: 1.0,
                         height: 14.0,
-                        margin: const EdgeInsets.symmetric(horizontal: 6.0),
+                        margin: const EdgeInsets.symmetric(horizontal: 5.0),
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.14)
                             : Colors.black.withValues(alpha: 0.12),
