@@ -21,14 +21,14 @@ class _ThemeSelectionDialogState extends State<ThemeSelectionDialog> {
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final c = app.colors;
 
     return AppDialog(
-      title: isAr ? 'اختر مظهر التطبيق' : 'Choose App Theme',
+      title: isId ? 'Pilih Tema Tampilan' : 'Choose App Theme',
       banner: AppDialogInfoBanner(
-        text: isAr
-            ? 'يمكنك تغيير المظهر لاحقاً من الإعدادات'
+        text: isId
+            ? 'Anda dapat mengubah tema kapan saja di Pengaturan'
             : 'You can change this later in settings',
       ),
       content: Padding(
@@ -39,7 +39,7 @@ class _ThemeSelectionDialogState extends State<ThemeSelectionDialog> {
           runSpacing: 18,
           children: [
             _ThemeSwatch(
-              title: isAr ? 'أبيض' : 'White',
+              title: isId ? 'Terang' : 'White',
               color: const Color(0xFFFAF8F5),
               isSelected: _selectedIndex == 0 ||
                   (_selectedIndex == null && app.theme == AppTheme.white),
@@ -54,7 +54,7 @@ class _ThemeSelectionDialogState extends State<ThemeSelectionDialog> {
               },
             ),
             _ThemeSwatch(
-              title: isAr ? 'أسود' : 'Black',
+              title: isId ? 'Gelap' : 'Black',
               color: const Color(0xFF000000),
               isSelected: _selectedIndex == 1 ||
                   (_selectedIndex == null && app.theme == AppTheme.black),
@@ -218,7 +218,7 @@ class _SpeedSelectionDialogState extends State<SpeedSelectionDialog> {
   Widget build(BuildContext context) {
     final app = AppState.instance;
     final c = app.colors;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final isDark = app.isDarkMode;
 
     return AppDialog(
@@ -229,18 +229,18 @@ class _SpeedSelectionDialogState extends State<SpeedSelectionDialog> {
         isCircle: false,
         padding: 12,
       ),
-      title: isAr ? 'سرعة التمرير التلقائي' : 'Auto-Scroll Speed',
+      title: isId ? 'Kecepatan Gulir Otomatis' : 'Auto-Scroll Speed',
       banner: AppDialogInfoBanner(
         icon: Icons.tune_rounded,
-        text: isAr
-            ? 'يمكنك ضبط وتغيير السرعة لاحقاً من الإعدادات'
+        text: isId
+            ? 'Kecepatan gulir dapat disesuaikan kembali di Pengaturan'
             : 'You can adjust speed anytime in settings',
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _ModernSpeedTile(
-            title: isAr ? 'بطيء' : 'Slow',
+            title: isId ? 'Lambat' : 'Slow',
             speedBadge: '0.5x',
             isSelected: _selectedIndex == 1 ||
                 (_selectedIndex == null && app.autoScrollSpeed == 1),
@@ -250,7 +250,7 @@ class _SpeedSelectionDialogState extends State<SpeedSelectionDialog> {
           ),
           const SizedBox(height: 8),
           _ModernSpeedTile(
-            title: isAr ? 'عادي' : 'Normal',
+            title: isId ? 'Normal' : 'Normal',
             speedBadge: '1.0x',
             isSelected: _selectedIndex == 2 ||
                 (_selectedIndex == null && app.autoScrollSpeed == 2),
@@ -260,7 +260,7 @@ class _SpeedSelectionDialogState extends State<SpeedSelectionDialog> {
           ),
           const SizedBox(height: 8),
           _ModernSpeedTile(
-            title: isAr ? 'سريع' : 'Fast',
+            title: isId ? 'Cepat' : 'Fast',
             speedBadge: '2.0x',
             isSelected: _selectedIndex == 4 ||
                 (_selectedIndex == null && app.autoScrollSpeed == 4),

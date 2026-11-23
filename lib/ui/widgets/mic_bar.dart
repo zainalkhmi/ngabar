@@ -20,7 +20,6 @@ class BottomActionBar extends StatelessWidget {
   final String surahName;
   final VoidCallback onSurahTap;
   final VoidCallback onSettingsTap;
-  final VoidCallback? onWearableTap;
   final VoidCallback? onPlayReciteTap;
   final bool isInMaglis;
   final VoidCallback? onMaglisTap;
@@ -42,7 +41,6 @@ class BottomActionBar extends StatelessWidget {
     required this.surahName,
     required this.onSurahTap,
     required this.onSettingsTap,
-    this.onWearableTap,
     this.onPlayReciteTap,
     this.isInMaglis = false,
     this.onMaglisTap,
@@ -427,23 +425,6 @@ class BottomActionBar extends StatelessWidget {
                                                     onTap: onPlayReciteTap!,
                                                   );
                                                 },
-                                              ),
-                                            ],
-                                            if (onWearableTap != null) ...[
-                                              SizedBox(width: gap),
-                                              _buildActionButton(
-                                                child: Icon(
-                                                  Icons.watch_rounded,
-                                                  size: 18.5,
-                                                  color: _btnFg(isDark),
-                                                ),
-                                                tooltip: 'Smartwatch / Wearable',
-                                                isActive: false,
-                                                isDark: isDark,
-                                                width: stdBtnWidth,
-                                                height: btnHeight,
-                                                dockHeight: dockHeight,
-                                                onTap: onWearableTap!,
                                               ),
                                             ],
                                             SizedBox(width: gap),

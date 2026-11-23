@@ -21,13 +21,13 @@ class PermissionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
 
-    final title = isAr ? 'إذن مطلوب' : 'Permission Required';
-    final message = isAr
+    final title = isId ? 'Izin Mikrofon Diperlukan' : 'Permission Required';
+    final message = isId
         ? (reason == PermissionReason.tracking
-            ? 'نحتاج إلى صلاحية الميكروفون لتتبع التلاوة. يرجى تفعيلها من الإعدادات.'
-            : 'نحتاج إلى صلاحية الميكروفون للبحث الصوتي. يرجى تفعيلها من الإعدادات.')
+            ? 'Aplikasi membutuhkan akses mikrofon untuk mendeteksi bacaan Al-Qur’an secara real-time. Silakan aktifkan di Pengaturan.'
+            : 'Aplikasi membutuhkan akses mikrofon untuk pencarian suara. Silakan aktifkan di Pengaturan.')
         : (reason == PermissionReason.tracking
             ? 'Microphone access is needed for recitation tracking. Please enable it in Settings.'
             : 'Microphone access is needed for Voice Search. Please enable it in Settings.');
@@ -39,14 +39,14 @@ class PermissionDialog extends StatelessWidget {
       title: title,
       subtitle: message,
       primaryAction: AppDialogActionItem(
-        label: isAr ? 'الإعدادات' : 'Settings',
+        label: isId ? 'Buka Pengaturan' : 'Settings',
         onPressed: () {
           Navigator.pop(context);
           openAppSettings();
         },
       ),
       secondaryAction: AppDialogActionItem(
-        label: isAr ? 'إلغاء' : 'Cancel',
+        label: isId ? 'Batal' : 'Cancel',
         onPressed: () => Navigator.pop(context),
       ),
     );
@@ -64,14 +64,14 @@ class ModelDownloadDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
 
-    final title = isAr ? 'تنزيل محرك الذكاء الاصطناعي' : 'Download AI Voice Model';
-    final message = isAr
-        ? 'يتطلب التتبع الصوتي والبحث تنزيل نموذج التعرف على الصوت (حوالي 72 ميجابايت) لمرة واحدة فقط ليعمل بدون إنترنت لاحقاً.'
+    final title = isId ? 'Unduh Model Suara AI' : 'Download AI Voice Model';
+    final message = isId
+        ? 'Pelacakan tilawah membutuhkan model pengenalan suara (~72MB) yang diunduh sekali agar dapat bekerja sepenuhnya secara offline.'
         : 'Voice tracking requires downloading the speech model (~72MB) once to work offline.';
 
-    final bannerText = isAr ? 'حجم البيانات: ~71 ميجابايت' : 'Download size: ~71 MB';
+    final bannerText = isId ? 'Ukuran unduhan: ~71 MB' : 'Download size: ~71 MB';
 
     return AppDialog(
       heroIcon: const AppDialogHeroIcon(
@@ -85,11 +85,11 @@ class ModelDownloadDialog extends StatelessWidget {
         text: bannerText,
       ),
       primaryAction: AppDialogActionItem(
-        label: isAr ? 'موافق • تنزيل' : 'Download',
+        label: isId ? 'Unduh Sekarang' : 'Download',
         onPressed: () => Navigator.pop(context, true),
       ),
       secondaryAction: AppDialogActionItem(
-        label: isAr ? 'إلغاء' : 'Cancel',
+        label: isId ? 'Batal' : 'Cancel',
         onPressed: () => Navigator.pop(context, false),
       ),
     );

@@ -451,9 +451,6 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 onSettingsTap: () {
                                   _showSettingsDialog();
                                 },
-                                onWearableTap: () {
-                                  DialogService.showWearable(context);
-                                },
                                 onPlayReciteTap: () async {
                                   final player = QuranAudioService.instance;
                                   if (player.isPlayingNotifier.value) {

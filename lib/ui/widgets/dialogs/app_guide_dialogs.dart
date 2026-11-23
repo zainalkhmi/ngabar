@@ -33,7 +33,7 @@ class AppGuideDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppState.instance;
     final c = app.colors;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final isDark = app.isDarkMode;
 
     final divider = Padding(
@@ -70,14 +70,14 @@ class AppGuideDialog extends StatelessWidget {
             _buildRow(
               icon: Icons.mic_rounded,
               iconColor: c.primary,
-              title: isAr ? 'التسميع الصوتي' : 'Voice Recitation',
+              title: isId ? 'Pelacakan Tilawah AI' : 'Voice Recitation',
               c: c,
               extra: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isAr
-                        ? 'اضغط زر الميكروفون بالأسفل وابدأ القراءة بصوتك.'
+                    isId
+                        ? 'Tekan tombol mikrofon di bawah dan mulailah membaca Al-Qur’an.'
                         : 'Tap the bottom Mic button and start reciting aloud.',
                     style: TextStyle(color: c.textSecondary, fontSize: 11.5, height: 1.35),
                   ),
@@ -86,9 +86,9 @@ class AppGuideDialog extends StatelessWidget {
                     spacing: 5,
                     runSpacing: 4,
                     children: [
-                      _buildChip(c.green, isAr ? 'أخضر: صحيح' : 'Green: Correct', c, isDark),
-                      _buildChip(c.warning, isAr ? 'أصفر: تجويد (اضغط للشرح)' : 'Yellow: Tajweed (tap to view)', c, isDark),
-                      _buildChip(c.red, isAr ? 'أحمر: خطأ' : 'Red: Error', c, isDark),
+                      _buildChip(c.green, isId ? 'Hijau: Benar' : 'Green: Correct', c, isDark),
+                      _buildChip(c.warning, isId ? 'Kuning: Tajwid (tekan untuk detail)' : 'Yellow: Tajweed (tap to view)', c, isDark),
+                      _buildChip(c.red, isId ? 'Merah: Kurang tepat' : 'Red: Error', c, isDark),
                     ],
                   ),
                 ],
@@ -100,9 +100,9 @@ class AppGuideDialog extends StatelessWidget {
             _buildRow(
               icon: Icons.visibility_off_rounded,
               iconColor: const Color(0xFF6366F1),
-              title: isAr ? 'وضع الحفظ (إخفاء الآيات)' : 'Hifz Mode (Hide Verses)',
-              text: isAr
-                  ? 'اضغط أيقونة العين لإخفاء الكلمات، وتظهر فور نطقك الصحيح لها.'
+              title: isId ? 'Mode Hafalan (Sembunyikan Ayat)' : 'Hifz Mode (Hide Verses)',
+              text: isId
+                  ? 'Tekan ikon mata untuk menyembunyikan teks ayat; kata akan terbuka otomatis saat dibaca dengan benar.'
                   : 'Tap the Eye icon to hide words; they reveal as you recite correctly.',
               c: c,
             ),
@@ -112,9 +112,9 @@ class AppGuideDialog extends StatelessWidget {
             _buildRow(
               icon: Icons.play_circle_fill_rounded,
               iconColor: isDark ? c.gold : const Color(0xFFD97706),
-              title: isAr ? 'تشغيل الصوت' : 'Audio Playback',
-              text: isAr
-                  ? 'اضغط رقم الآية للاستماع للشيخ، واضغط أي كلمة لسماع نطقها.'
+              title: isId ? 'Putar Audio Murottal' : 'Audio Playback',
+              text: isId
+                  ? 'Tekan nomor ayat untuk mendengar qari, atau tekan kata untuk mendengar pelafalannya.'
                   : 'Tap Ayah number to hear recitation, or tap any word to hear pronunciation.',
               c: c,
             ),
@@ -124,9 +124,9 @@ class AppGuideDialog extends StatelessWidget {
             _buildRow(
               icon: Icons.graphic_eq_rounded,
               iconColor: const Color(0xFF10B981),
-              title: isAr ? 'البحث الصوتي' : 'Voice Search',
-              text: isAr
-                  ? 'زر داخل قائمة السور للبحث الصوتي عن أي آية بمجرد نطقها.'
+              title: isId ? 'Pencarian Suara' : 'Voice Search',
+              text: isId
+                  ? 'Cari ayat dalam daftar surat secara instan hanya dengan melafalkannya.'
                   : 'Recite any verse inside the Surah list to jump to it instantly.',
               c: c,
             ),
@@ -136,9 +136,9 @@ class AppGuideDialog extends StatelessWidget {
             _buildRow(
               icon: Icons.groups_rounded,
               iconColor: const Color(0xFF2563EB),
-              title: isAr ? 'مجلس القرآن' : 'Quran Majlis',
-              text: isAr
-                  ? 'تلاوة جماعية مباشرة بمكالمة صوتية وتصفح مشترك عبر رمز (5 أرقام).'
+              title: isId ? 'Majlis Quran' : 'Quran Majlis',
+              text: isId
+                  ? 'Tilawah bersama secara langsung via audio & sinkronisasi halaman mushaf dengan kode 5 angka.'
                   : 'Recite together live with open voice call & synced pages via a 5-digit code.',
               c: c,
             ),
@@ -146,7 +146,7 @@ class AppGuideDialog extends StatelessWidget {
         ),
       ),
       primaryAction: AppDialogActionItem(
-        label: isAr ? 'فهمت' : 'Got it',
+        label: isId ? 'Mengerti' : 'Got it',
         onPressed: () => Navigator.of(context).pop(),
       ),
     );
@@ -256,11 +256,11 @@ class MaglisExplanationDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final c = app.colors;
 
-    final purpose = isAr
-        ? 'مجلس قرآني مباشر بالصوت وتزامن المصحف (حتى 4 أفراد) للتسميع والتصحيح بين المعلم والطلاب.'
+    final purpose = isId
+        ? 'Majlis tilawah Al-Qur’an interaktif dengan sambungan suara langsung dan sinkronisasi mushaf bersama (hingga 4 peserta).'
         : 'A live Quran Majlis with open voice & synced Mushaf (up to 4 peers) to recite and correct together.';
 
     return AppDialog(
@@ -269,7 +269,7 @@ class MaglisExplanationDialog extends StatelessWidget {
         iconSize: 30,
         padding: 12,
       ),
-      title: isAr ? 'مجلس القرآن المجيد' : 'The Glorious Quran Majlis',
+      title: isId ? 'Majlis Al-Qur’an' : 'The Glorious Quran Majlis',
       banner: AppDialogInfoBanner(
         text: purpose,
       ),
@@ -278,25 +278,25 @@ class MaglisExplanationDialog extends StatelessWidget {
         children: [
           _buildStepRow(
             number: '1',
-            title: isAr ? 'الرمز (5 أرقام)' : '5-Digit Majlis Code',
-            body: isAr
-                ? '• المعلم: يضغط "عقد المجلس" ويشارك الرمز مع الطلاب.\n• الطالب: يضغط "دخول المجلس" ويكتب الرمز للانضمام فوراً.'
+            title: isId ? 'Kode Majlis (5 Digit)' : '5-Digit Majlis Code',
+            body: isId
+                ? '• Tuan Rumah: Tekan "Buka Majlis" dan bagikan kode kepada teman.\n• Peserta: Tekan "Gabung Majlis", masukkan kode 5 digit, dan langsung bergabung.'
                 : '• Teacher: Taps "Open Majlis" and shares the code.\n• Student: Taps "Join Majlis", types code, and enters instantly.',
             c: c,
           ),
           const SizedBox(height: 10),
           _buildStepRow(
             number: '2',
-            title: isAr ? 'التسميع والتصحيح' : 'Reciting & Guiding',
-            body: isAr
-                ? '• الصوت مسموع للجميع للمحادثة والتوجيه كمكالمة حية.\n• عند ضغط زر "التسجيل"، يظهر مصحفك وتلاوتك للجميع.'
+            title: isId ? 'Tilawah & Saling Memperbaiki' : 'Reciting & Guiding',
+            body: isId
+                ? '• Panggilan suara aktif secara otomatis untuk saling menyimak dan berbincang.\n• Tekan tombol "Rekam" saat giliran membaca untuk menampilkan mushaf dan bacaan Anda ke semua peserta.'
                 : '• Voice call is live for everyone to listen and guide.\n• Tap "Record" to broadcast your recitation and verses live.',
             c: c,
           ),
         ],
       ),
       primaryAction: AppDialogActionItem(
-        label: isAr ? 'فهمت، لنبدأ' : "Got it, let's start",
+        label: isId ? 'Mengerti, Mulai' : "Got it, let's start",
         onPressed: () {
           Navigator.of(context).pop();
         },
