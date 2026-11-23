@@ -227,7 +227,6 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   @override
   Widget build(BuildContext context) {
     final app = AppState.instance;
-    final app = AppState.instance;
     final c = app.colors;
     final isId = app.isIndonesian;
     final isDark = app.isDarkMode;
