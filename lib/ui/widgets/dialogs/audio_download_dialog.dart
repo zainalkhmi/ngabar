@@ -218,7 +218,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                 final s = idx + 1;
                 final isSel = _selected.contains(s);
                 final isDown = _downloaded.contains(s);
-                final app = context.read<AppState>();
+                final app = AppState.instance;
                 final isAr = app.isArabic;
                 final isId = app.isIndonesian;
                 final name = QuranMetadata.getSurahNameArabic(s);
