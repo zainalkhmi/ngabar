@@ -350,6 +350,103 @@ class BottomActionBar extends StatelessWidget {
                                               ),
                                             ),
                                             SizedBox(width: maglisGap),
+                                            // ── Raise Hand / Turn-Taking Button ──
+                                            Expanded(
+                                              flex: 10,
+                                              child: AnimatedBuilder(
+                                                animation: MaglisController.instance,
+                                                builder: (context, _) {
+                                                  final maglis = MaglisController.instance;
+                                                  final bool raised = maglis.isHandRaised;
+                                                  final int queueCount = maglis.tadarusQueue.length;
+                                                  final bool isMyTurn = maglis.nextInQueue == maglis.localPeerId;
+
+                                                  return Stack(
+                                                    clipBehavior: Clip.none,
+                                                    children: [
+                                                      _buildActionButton(
+                                                        child: Icon(
+                                                          raised
+                                                              ? Icons.pan_tool_rounded
+                                                              : Icons.pan_tool_outlined,
+                                                          size: 18.0,
+                                                          color: isMyTurn
+                                                              ? const Color(0xFF10B981)
+                                                              : (raised ? const Color(0xFFF59E0B) : _btnFg(isDark)),
+                                                        ),
+                                                        tooltip: app.isIndonesian
+                                                            ? (raised ? 'Turunkan Tangan (Batal Antre)' : 'Angkat Tangan (Antre Giliran)')
+                                                            : (isAr ? 'رفع اليد للتلاوة' : 'Raise Hand to Recite'),
+                                                        isActive: raised || isMyTurn,
+                                                        isDark: isDark,
+                                                        height: btnHeight,
+                                                        dockHeight: dockHeight,
+                                                        onTap: () {
+                                                          maglis.toggleRaiseHand();
+                                                        },
+                                                      ),
+                                                      if (queueCount > 0)
+                                                        Positioned(
+                                                          top: 2,
+                                                          right: 2,
+                                                          child: Container(
+                                                            padding: const EdgeInsets.all(2.5),
+                                                            decoration: BoxDecoration(
+                                                              color: isMyTurn ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                                            alignment: Alignment.center,
+                                                            child: Text(
+                                                              '$queueCount',
+                                                              style: const TextStyle(
+                                                                color: Colors.white,
+                                                                fontSize: 8,
+                                                                fontWeight: FontWeight.w900,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            SizedBox(width: maglisGap),
+                                            // ── Pass Turn / Oper Giliran (visible if reciting or host) ──
+                                            AnimatedBuilder(
+                                              animation: MaglisController.instance,
+                                              builder: (context, _) {
+                                                final maglis = MaglisController.instance;
+                                                final bool canPass = maglis.isLocalReciting || (maglis.isHost && maglis.tadarusQueue.isNotEmpty);
+                                                if (!canPass) return const SizedBox.shrink();
+
+                                                return Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Expanded(
+                                                      flex: 10,
+                                                      child: _buildActionButton(
+                                                        child: const Icon(
+                                                          Icons.skip_next_rounded,
+                                                          size: 20.0,
+                                                          color: Color(0xFF10B981),
+                                                        ),
+                                                        tooltip: app.isIndonesian ? 'Oper Giliran Membaca' : 'Pass Turn to Next',
+                                                        isActive: true,
+                                                        isDark: isDark,
+                                                        height: btnHeight,
+                                                        dockHeight: dockHeight,
+                                                        onTap: () {
+                                                          maglis.passTurnToNext();
+                                                        },
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: maglisGap),
+                                                  ],
+                                                );
+                                              },
+                                            ),
                                             Expanded(
                                               flex: 10,
                                               child: ValueListenableBuilder<int>(

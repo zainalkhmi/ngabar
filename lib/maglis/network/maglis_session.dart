@@ -16,6 +16,7 @@ class MaglisActiveSession {
 
   StreamSubscription<MaglisPacket>? pktSub;
   StreamSubscription<MaglisChatMessage>? chatSub;
+  StreamSubscription<TadarusControlPacket>? tadarusSub;
   StreamSubscription<Map<String, RTCIceConnectionState>>? stateSub;
   StreamSubscription<String>? natSub;
   StreamSubscription<int>? participantSub;
@@ -91,11 +92,13 @@ class MaglisActiveSession {
     lastFloorReleaseOriginTsByPeer.clear();
     await pktSub?.cancel();
     await chatSub?.cancel();
+    await tadarusSub?.cancel();
     await stateSub?.cancel();
     await natSub?.cancel();
     await participantSub?.cancel();
     pktSub = null;
     chatSub = null;
+    tadarusSub = null;
     stateSub = null;
     natSub = null;
     participantSub = null;

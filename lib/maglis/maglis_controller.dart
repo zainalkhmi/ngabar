@@ -45,6 +45,12 @@ class MaglisController extends ChangeNotifier {
   final ValueNotifier<int> unreadChatCount = ValueNotifier<int>(0);
   final ValueNotifier<MaglisChatMessage?> latestIncomingChat = ValueNotifier<MaglisChatMessage?>(null);
 
+  // ── Tadarus Queue & Simakan State ──
+  final List<String> _tadarusQueue = [];
+  List<String> get tadarusQueue => List.unmodifiable(_tadarusQueue);
+  bool get isHandRaised => _tadarusQueue.contains(localPeerId);
+  String? get nextInQueue => _tadarusQueue.isNotEmpty ? _tadarusQueue.first : null;
+
   void markChatAsRead() {
     unreadChatCount.value = 0;
   }
@@ -70,6 +76,226 @@ class MaglisController extends ChangeNotifier {
     _chatMessages.add(msg);
     s?.net.sendChatMessage(msg);
     notifyListeners();
+  }
+
+  // ── Tadarus Turn-Taking Controls ──
+
+  /// Toggles hand raised status to join or leave the reading queue.
+  void toggleRaiseHand() {
+    final s = _session;
+    if (s == null) return;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final bool raising = !isHandRaised;
+    if (raising) {
+      if (!_tadarusQueue.contains(localPeerId)) {
+        _tadarusQueue.add(localPeerId);
+      }
+      s.net.sendTadarusControl(TadarusControlPacket(
+        action: TadarusControlAction.raiseHand,
+        senderId: localPeerId,
+        ts: ts,
+      ));
+    } else {
+      _tadarusQueue.remove(localPeerId);
+      s.net.sendTadarusControl(TadarusControlPacket(
+        action: TadarusControlAction.lowerHand,
+        senderId: localPeerId,
+        ts: ts,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// Passes the reading turn to the next person in the queue or a designated peer.
+  void passTurnToNext({String? specificPeerId}) {
+    final s = _session;
+    if (s == null) return;
+    final target = specificPeerId ?? (_tadarusQueue.isNotEmpty ? _tadarusQueue.first : null);
+    if (target != null) {
+      _tadarusQueue.remove(target);
+    }
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    s.net.sendTadarusControl(TadarusControlPacket(
+      action: TadarusControlAction.passTurn,
+      senderId: localPeerId,
+      targetPeerId: target,
+      queue: List<String>.from(_tadarusQueue),
+      ts: ts,
+    ));
+    if (s.isLocalReciting) {
+      releaseFloor();
+    }
+    notifyListeners();
+  }
+
+  /// Ustadz/Host taps a word to mark it as error in Simakan mode (1 = Yellow, 2 = Red).
+  void markManualCorrection({
+    required int surah,
+    required int ayah,
+    required int wordIndex,
+    int errorColor = 2, // Default Red
+  }) {
+    final s = _session;
+    if (s == null) return;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+
+    // Apply locally right away
+    _applyManualWordCorrection(surah: surah, ayah: ayah, wordIndex: wordIndex, errorColor: errorColor);
+
+    s.net.sendTadarusControl(TadarusControlPacket(
+      action: TadarusControlAction.manualCorrection,
+      senderId: localPeerId,
+      surah: surah,
+      ayah: ayah,
+      wordIndex: wordIndex,
+      errorColor: errorColor,
+      ts: ts,
+    ));
+  }
+
+  void _applyManualWordCorrection({
+    required int surah,
+    required int ayah,
+    required int wordIndex,
+    required int errorColor,
+  }) {
+    final s = _session;
+    if (s == null) return;
+
+    final red = List<int>.from(s.remoteRedWords);
+    final yellow = List<int>.from(s.remoteYellowWords);
+    final green = List<int>.from(s.remoteGreenWords);
+
+    green.remove(wordIndex);
+    if (errorColor == 2) {
+      yellow.remove(wordIndex);
+      if (!red.contains(wordIndex)) red.add(wordIndex);
+    } else {
+      red.remove(wordIndex);
+      if (!yellow.contains(wordIndex)) yellow.add(wordIndex);
+    }
+
+    s.remoteRedWords = red..sort();
+    s.remoteYellowWords = yellow..sort();
+    s.remoteGreenWords = green..sort();
+
+    onRemoteRecitationProgress?.call(
+      surah: surah,
+      ayah: ayah,
+      activeWord: s.remoteWord,
+      greenWords: s.remoteGreenWords,
+      yellowWords: s.remoteYellowWords,
+      redWords: s.remoteRedWords,
+      isReciting: s.isRemoteReciting,
+    );
+    notifyListeners();
+  }
+
+  /// Host commands all participants to mute their microphone.
+  void muteAllRoom() {
+    final s = _session;
+    if (s == null) return;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    s.net.sendTadarusControl(TadarusControlPacket(
+      action: TadarusControlAction.muteAll,
+      senderId: localPeerId,
+      ts: ts,
+    ));
+  }
+
+  void _handleTadarusControl(TadarusControlPacket pkt) {
+    final s = _session;
+    if (s == null) return;
+
+    switch (pkt.action) {
+      case TadarusControlAction.raiseHand:
+        if (!_tadarusQueue.contains(pkt.senderId)) {
+          _tadarusQueue.add(pkt.senderId);
+          AppState.instance.showBanner(AppBannerInfo(
+            id: 'hand_raised_${pkt.senderId}',
+            messageAr: 'قام أحد المشاركين برفع يده للتلاوة',
+            messageEn: 'Participant raised hand to recite',
+            messageId: 'Peserta antre untuk membaca',
+            icon: Icons.pan_tool_rounded,
+            customDuration: const Duration(seconds: 3),
+          ));
+          notifyListeners();
+        }
+        break;
+
+      case TadarusControlAction.lowerHand:
+        if (_tadarusQueue.remove(pkt.senderId)) {
+          notifyListeners();
+        }
+        break;
+
+      case TadarusControlAction.passTurn:
+        if (pkt.queue != null) {
+          _tadarusQueue
+            ..clear()
+            ..addAll(pkt.queue!);
+        } else if (pkt.targetPeerId != null) {
+          _tadarusQueue.remove(pkt.targetPeerId);
+        }
+        if (pkt.targetPeerId == localPeerId) {
+          // It's local user's turn!
+          AppState.instance.showBanner(AppBannerInfo(
+            id: 'your_turn_to_recite',
+            messageAr: 'حان دورك للتلاوة! اضغط على الميكروفون',
+            messageEn: "It's your turn to recite! Tap the mic",
+            messageId: 'Giliran Anda membaca! Ketuk mikrofon',
+            icon: Icons.mic_rounded,
+            customDuration: const Duration(seconds: 5),
+          ));
+        }
+        notifyListeners();
+        break;
+
+      case TadarusControlAction.syncQueue:
+        if (pkt.queue != null) {
+          _tadarusQueue
+            ..clear()
+            ..addAll(pkt.queue!);
+          notifyListeners();
+        }
+        break;
+
+      case TadarusControlAction.manualCorrection:
+        if (pkt.surah != null && pkt.ayah != null && pkt.wordIndex != null) {
+          _applyManualWordCorrection(
+            surah: pkt.surah!,
+            ayah: pkt.ayah!,
+            wordIndex: pkt.wordIndex!,
+            errorColor: pkt.errorColor ?? 2,
+          );
+          if (s.isLocalReciting) {
+            AppState.instance.showBanner(AppBannerInfo(
+              id: 'simakan_correction',
+              messageAr: 'تنبيه تصحيح من المشرف على الكلمة',
+              messageEn: 'Correction from moderator on the word',
+              messageId: 'Koreksi simakan dari Ustadz pada kata ini',
+              icon: Icons.edit_note_rounded,
+              isWarning: true,
+              customDuration: const Duration(seconds: 4),
+            ));
+          }
+        }
+        break;
+
+      case TadarusControlAction.muteAll:
+        if (!s.isHost) {
+          setMicMuted(true);
+          AppState.instance.showBanner(AppBannerInfo(
+            id: 'muted_by_host',
+            messageAr: 'تم كتم الصوت من قبل المشرف',
+            messageEn: 'Muted by host',
+            messageId: 'Mikrofon dibisukan oleh Ustadz/Host',
+            icon: Icons.mic_off_rounded,
+            customDuration: const Duration(seconds: 3),
+          ));
+        }
+        break;
+    }
   }
 
   void _notifySessionChanged() {
@@ -239,6 +465,10 @@ class MaglisController extends ChangeNotifier {
         unreadChatCount.value++;
         latestIncomingChat.value = msg;
         notifyListeners();
+      });
+      session.tadarusSub = net.onTadarusControl.listen((ctrlPkt) {
+        if (_session != session) return;
+        _handleTadarusControl(ctrlPkt);
       });
 
       // Connect and establish room presence across relays (throws if offline or unreachable)
@@ -936,6 +1166,7 @@ class MaglisController extends ChangeNotifier {
 
     _session = null;
     _chatMessages.clear();
+    _tadarusQueue.clear();
     unreadChatCount.value = 0;
     latestIncomingChat.value = null;
     onSessionEnded?.call();

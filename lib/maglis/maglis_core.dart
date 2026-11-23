@@ -1033,3 +1033,70 @@ class MaglisChatMessage {
     );
   }
 }
+
+/// Action types for Tadarus Turn-Taking and Host/Moderator controls (Wire protocol type 96).
+enum TadarusControlAction {
+  raiseHand,       // Participant raises hand to join reading queue
+  lowerHand,       // Participant cancels queue / lowers hand
+  passTurn,        // Reciter or Host passes turn to the next person
+  syncQueue,       // Host synchronizes the active queue list across room
+  manualCorrection,// Ustadz/Host taps a word to mark it as error (Simakan)
+  muteAll,         // Host requests all peers to mute mic
+}
+
+/// Wire model for Tadarus Turn-Taking, Queue, and Simakan Corrections.
+class TadarusControlPacket {
+  final TadarusControlAction action;
+  final String senderId;
+  final String? targetPeerId;
+  final String? participantName;
+  final List<String>? queue;
+  final int? surah;
+  final int? ayah;
+  final int? wordIndex;
+  final int? errorColor; // 1 = Yellow, 2 = Red
+  final int ts;
+
+  const TadarusControlPacket({
+    required this.action,
+    required this.senderId,
+    this.targetPeerId,
+    this.participantName,
+    this.queue,
+    this.surah,
+    this.ayah,
+    this.wordIndex,
+    this.errorColor,
+    required this.ts,
+  });
+
+  Map<String, dynamic> toJson() => {
+        't': 96, // wire type 96 for Tadarus Control
+        'a': action.index,
+        'u': senderId,
+        if (targetPeerId != null) 'tgt': targetPeerId,
+        if (participantName != null) 'n': participantName,
+        if (queue != null) 'q': queue,
+        if (surah != null) 's': surah,
+        if (ayah != null) 'ay': ayah,
+        if (wordIndex != null) 'w': wordIndex,
+        if (errorColor != null) 'c': errorColor,
+        'ts': ts,
+      };
+
+  factory TadarusControlPacket.fromJson(Map<String, dynamic> json) {
+    final aIdx = (json['a'] as int?) ?? 0;
+    return TadarusControlPacket(
+      action: TadarusControlAction.values[aIdx.clamp(0, TadarusControlAction.values.length - 1)],
+      senderId: (json['u'] as String?) ?? '',
+      targetPeerId: json['tgt'] as String?,
+      participantName: json['n'] as String?,
+      queue: (json['q'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      surah: json['s'] as int?,
+      ayah: json['ay'] as int?,
+      wordIndex: json['w'] as int?,
+      errorColor: json['c'] as int?,
+      ts: (json['ts'] as int?) ?? DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+}

@@ -23,6 +23,7 @@ class MaglisPeerSession {
       onStatesChanged;
   final void Function(MaglisPacket packet) onPacketReceived;
   final void Function(MaglisChatMessage chatMessage)? onChatMessageReceived;
+  final void Function(TadarusControlPacket controlPacket)? onTadarusControlReceived;
   final void Function(String peerId) onPeerClosed;
   final void Function(List<String> discoveredPeers) onPeerListDiscovered;
   final void Function() checkSocketSleepState;
@@ -36,6 +37,7 @@ class MaglisPeerSession {
     required this.onStatesChanged,
     required this.onPacketReceived,
     this.onChatMessageReceived,
+    this.onTadarusControlReceived,
     required this.onPeerClosed,
     required this.onPeerListDiscovered,
     required this.checkSocketSleepState,
@@ -829,6 +831,19 @@ class MaglisPeerSession {
             final chatMsg = MaglisChatMessage.fromJson(m);
             onChatMessageReceived?.call(chatMsg);
             // Relay chat message to other connected mesh peers (1-hop relay)
+            _relayChatToOtherPeers(raw, senderId: u);
+          }
+        } catch (_) {}
+        return;
+      }
+
+      if (raw.contains('"t":96') || raw.contains('"type":"tadarus_control"')) {
+        try {
+          final m = jsonDecode(raw) as Map<String, dynamic>;
+          final u = m['u'] as String?;
+          if (u != null && u.isNotEmpty && u != localPeerId) {
+            final ctrlPkt = TadarusControlPacket.fromJson(m);
+            onTadarusControlReceived?.call(ctrlPkt);
             _relayChatToOtherPeers(raw, senderId: u);
           }
         } catch (_) {}

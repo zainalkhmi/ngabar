@@ -73,12 +73,14 @@ class MaglisNetworkEngine {
 
   final _packetCtrl = StreamController<MaglisPacket>.broadcast();
   final _chatCtrl = StreamController<MaglisChatMessage>.broadcast();
+  final _tadarusCtrl = StreamController<TadarusControlPacket>.broadcast();
   final _statesCtrl =
       StreamController<Map<String, RTCIceConnectionState>>.broadcast();
   final _natFailCtrl = StreamController<String>.broadcast();
   final _participantCountCtrl = StreamController<int>.broadcast();
 
   Stream<MaglisChatMessage> get onChatMessage => _chatCtrl.stream;
+  Stream<TadarusControlPacket> get onTadarusControl => _tadarusCtrl.stream;
 
   final ParticipantCollection remoteParticipants = ParticipantCollection();
   final Set<String> _admittedPeers = <String>{};
@@ -144,6 +146,14 @@ class MaglisNetworkEngine {
             !_departedPeers.contains(chatMsg.senderId)) {
           _addOrUpdateParticipant(chatMsg.senderId, dataChannelOpen: true);
           _chatCtrl.add(chatMsg);
+        }
+      },
+      onTadarusControlReceived: (ctrlPkt) {
+        if (ctrlPkt.senderId.isNotEmpty &&
+            ctrlPkt.senderId != localPeerId &&
+            !_departedPeers.contains(ctrlPkt.senderId)) {
+          _addOrUpdateParticipant(ctrlPkt.senderId, dataChannelOpen: true);
+          _tadarusCtrl.add(ctrlPkt);
         }
       },
       onPeerClosed: (peerId) {
@@ -743,6 +753,11 @@ class MaglisNetworkEngine {
 
   void sendChatMessage(MaglisChatMessage chatMessage) {
     final raw = jsonEncode(chatMessage.toJson());
+    _peerSession.dispatchReliable(raw, isVital: true);
+  }
+
+  void sendTadarusControl(TadarusControlPacket ctrlPkt) {
+    final raw = jsonEncode(ctrlPkt.toJson());
     _peerSession.dispatchReliable(raw, isVital: true);
   }
 

@@ -205,6 +205,26 @@ class _MaglisChatSheetState extends State<MaglisChatSheet> {
                         ],
                       ),
                     ),
+                    if (MaglisController.instance.isHost)
+                      IconButton(
+                        tooltip: isId ? 'Bisukan Semua (Mute All)' : 'Mute All',
+                        icon: const Icon(
+                          Icons.volume_off_rounded,
+                          color: Color(0xFFEF4444),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          MaglisController.instance.muteAllRoom();
+                          AppState.instance.showBanner(AppBannerInfo(
+                            id: 'host_mute_all',
+                            messageAr: 'تم طلب كتم صوت جميع المشاركين',
+                            messageEn: 'Muted all participants',
+                            messageId: 'Semua mikrofon peserta dibisukan oleh Host',
+                            icon: Icons.mic_off_rounded,
+                            customDuration: const Duration(seconds: 3),
+                          ));
+                        },
+                      ),
                     IconButton(
                       icon: Icon(
                         Icons.close_rounded,

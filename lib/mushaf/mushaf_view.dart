@@ -976,6 +976,28 @@ class _MushafViewState extends State<MushafView>
       }
     }
 
+    // Simakan Mode: If Ustadz/Host is listening to a remote reciter in Majlis,
+    // tapping a word marks it as a correction directly for all participants!
+    final maglis = MaglisController.instance;
+    if (maglis.inSession && maglis.isRemoteReciting) {
+      maglis.markManualCorrection(
+        surah: surah,
+        ayah: ayah,
+        wordIndex: wordIndex0,
+        errorColor: 2, // Red error marker
+      );
+      HapticFeedback.heavyImpact();
+      AppState.instance.showBanner(AppBannerInfo(
+        id: 'simakan_marked',
+        messageAr: 'تم وضع علامة تصحيح على الكلمة',
+        messageEn: 'Marked word correction for reciter',
+        messageId: 'Menandai koreksi simakan pada kata untuk qari',
+        icon: Icons.edit_note_rounded,
+        customDuration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+
     QuranInteractionService.handleWordTap(
       context: context,
       surah: surah,
