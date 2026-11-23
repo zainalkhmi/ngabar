@@ -55,6 +55,7 @@ class AppBannerInfo {
   final String id;
   final String messageAr;
   final String messageEn;
+  final String? messageId;
   final IconData icon;
   final Color Function(ThemeColors c, bool isDark)? customColor;
   final bool isWarning;
@@ -64,11 +65,19 @@ class AppBannerInfo {
     required this.id,
     required this.messageAr,
     required this.messageEn,
+    this.messageId,
     required this.icon,
     this.customColor,
     this.isWarning = false,
     this.customDuration,
   });
+
+  String resolve(AppState app) {
+    if (app.isIndonesian) {
+      return messageId ?? messageEn;
+    }
+    return messageEn;
+  }
 }
 
 class AppState extends ChangeNotifier {
@@ -591,6 +600,7 @@ class AppState extends ChangeNotifier {
       id: 'tajweed',
       messageAr: 'تم تفعيل التجويد • اضغط على الكلمات الصفراء لمعرفة الخطأ',
       messageEn: 'Tajweed Enabled • Tap yellow words for error details',
+      messageId: 'Tajwid Aktif • Tekan kata berwarna kuning untuk detail kesalahan',
       icon: Icons.record_voice_over_rounded,
       isWarning: false,
     ));
@@ -609,6 +619,7 @@ class AppState extends ChangeNotifier {
       id: 'ayah_not_found',
       messageAr: 'لم يتم العثور على أي آية • حاول مرة أخرى',
       messageEn: 'No Ayah found • Please try again',
+      messageId: 'Ayat tidak ditemukan • Silakan coba lagi',
       icon: Icons.search_off_rounded,
       isWarning: true,
     ));
@@ -620,6 +631,7 @@ class AppState extends ChangeNotifier {
       id: 'settings_reset',
       messageAr: 'تمت إعادة ضبط الإعدادات بنجاح',
       messageEn: 'Settings reset successfully',
+      messageId: 'Pengaturan berhasil diatur ulang',
       icon: Icons.check_circle_outline_rounded,
       isWarning: false,
     ));
@@ -633,6 +645,8 @@ class AppState extends ChangeNotifier {
         messageAr: 'تم تفعيل وضع الحفظ • إخفاء الكلمات لاختبار التسميع',
         messageEn:
             'Memorization Mode Enabled • Words hidden for recitation test',
+        messageId:
+            'Mode Hafalan Aktif • Teks ayat disembunyikan untuk menguji hafalan',
         icon: Icons.visibility_off_rounded,
         isWarning: false,
       ));

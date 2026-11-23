@@ -267,7 +267,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     );
   }
 
-  Widget _buildLoadingState(ThemeColors c, bool isAr) {
+  Widget _buildLoadingState(ThemeColors c, bool isId) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
@@ -283,8 +283,8 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
           ),
           const SizedBox(height: 20),
           Text(
-            isAr
-                ? 'جاري تجهيز البحث الصوتي...'
+            isId
+                ? 'Menyiapkan indeks pencarian suara...'
                 : 'Preparing voice search index...',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -298,7 +298,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     );
   }
 
-  Widget _buildContent(ThemeColors c, bool isAr) {
+  Widget _buildContent(ThemeColors c, bool isId) {
     final bool hasCandidates =
         _currentResult != null && _currentResult!.candidates.isNotEmpty;
 
@@ -311,7 +311,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
           alignment: AlignmentDirectional.topEnd,
           child: IconButton(
             icon: Icon(Icons.close_rounded, color: c.muted, size: 20),
-            tooltip: isAr ? 'إلغاء' : 'Cancel',
+            tooltip: isId ? 'Batal' : 'Cancel',
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
@@ -325,33 +325,33 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
         // ── Hero Section (Listening or Candidates) ──
         if (!hasCandidates) ...[
           const SizedBox(height: 8),
-          _buildHeroListening(c, isAr),
+          _buildHeroListening(c, isId),
           const SizedBox(height: 8),
         ] else ...[
-          _buildCompactHeader(c, isAr),
+          _buildCompactHeader(c, isId),
           const SizedBox(height: 6),
-          _buildCountdownGraceBanner(c, isAr),
+          _buildCountdownGraceBanner(c, isId),
           const SizedBox(height: 6),
-          _buildCandidatesList(c, isAr),
+          _buildCandidatesList(c, isId),
           const SizedBox(height: 6),
         ],
       ],
     );
   }
 
-  Widget _buildHeroListening(ThemeColors c, bool isAr) {
+  Widget _buildHeroListening(ThemeColors c, bool isId) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Primary prompt at top
         Text(
-          isAr
-              ? 'اتلُ أي آية من القرآن العظيم'
+          isId
+              ? 'Bacalah potongan ayat Al-Qur’an'
               : 'Recite any verse from The Great Quran',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: c.text,
-            fontSize: isAr ? 19 : 17,
+            fontSize: isId ? 18 : 17,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -446,7 +446,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
               ),
               const SizedBox(width: 8),
               Text(
-                isAr ? 'في انتظار تلاوتك...' : 'Listening to recitation...',
+                isId ? 'Mendengarkan lantunan suara...' : 'Listening to recitation...',
                 style: TextStyle(
                   color: c.primary,
                   fontSize: 12,
@@ -460,12 +460,12 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     );
   }
 
-  Widget _buildCompactHeader(ThemeColors c, bool isAr) {
+  Widget _buildCompactHeader(ThemeColors c, bool isId) {
     return Row(
       children: [
         Expanded(
           child: Text(
-            isAr ? 'الآيات المتطابقة' : 'Matching Ayahs',
+            isId ? 'Ayat yang Cocok' : 'Matching Ayahs',
             style: TextStyle(
               color: c.primary,
               fontSize: 13.5,
@@ -508,7 +508,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     );
   }
 
-  Widget _buildCountdownGraceBanner(ThemeColors c, bool isAr) {
+  Widget _buildCountdownGraceBanner(ThemeColors c, bool isId) {
     return Container(
       decoration: BoxDecoration(
         color: _isCountdownPaused
@@ -542,7 +542,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                     builder: (_, __) {
                       if (_isCountdownPaused) {
                         return Text(
-                          isAr ? 'موقوف' : 'Paused',
+                          isId ? 'Jeda' : 'Paused',
                           style: TextStyle(
                             color: c.text.withValues(alpha: 0.85),
                             fontSize: 11,
@@ -555,8 +555,8 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                               .ceil()
                               .clamp(1, _activeGraceSeconds);
                       return Text(
-                        isAr
-                            ? 'الانتقال: ${secRemaining}ث'
+                        isId
+                            ? 'Menuju ayat: ${secRemaining}d'
                             : 'Jump: ${secRemaining}s',
                         style: TextStyle(
                           color: c.primary,
@@ -614,8 +614,8 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                           const SizedBox(width: 3.5),
                           Text(
                             _isCountdownPaused
-                                ? (isAr ? 'استئناف' : 'Resume')
-                                : (isAr ? 'إيقاف' : 'Hold'),
+                                ? (isId ? 'Lanjut' : 'Resume')
+                                : (isId ? 'Tahan' : 'Hold'),
                             style: const TextStyle(
                               fontFamily: 'cairo',
                               color: Colors.white,

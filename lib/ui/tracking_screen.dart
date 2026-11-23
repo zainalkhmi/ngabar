@@ -469,6 +469,9 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 maglisRoomCode: maglis.roomCode,
                                 maglisPeerCount: peerCount,
                                 isRemoteReciting: maglis.isRemoteReciting,
+                                onMaglisChatTap: () {
+                                  DialogService.showMaglisChat(context);
+                                },
                                 onMaglisTap: () async {
                                   app.recordMaglisTap();
                                   if (!app.hasSeenMaglisExplanation) {
@@ -490,6 +493,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                                     id: 'maglis_left',
                                     messageAr: 'تمت مغادرة المجلس بنجاح',
                                     messageEn: 'Left Majlis session',
+                                    messageId: 'Berhasil keluar dari sesi Majlis',
                                     icon: Icons.exit_to_app_rounded,
                                   ));
                                 },
@@ -663,7 +667,7 @@ class _TrackingScreenState extends State<TrackingScreen>
 
     final Color iconColor =
         (banner.isWarning && isDark) ? const Color(0xFFFBBF24) : accentColor;
-    final String message = isAr ? banner.messageAr : banner.messageEn;
+    final String message = banner.resolve(app);
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 280),

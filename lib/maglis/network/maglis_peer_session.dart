@@ -22,6 +22,7 @@ class MaglisPeerSession {
   final void Function(Map<String, RTCIceConnectionState> states)
       onStatesChanged;
   final void Function(MaglisPacket packet) onPacketReceived;
+  final void Function(MaglisChatMessage chatMessage)? onChatMessageReceived;
   final void Function(String peerId) onPeerClosed;
   final void Function(List<String> discoveredPeers) onPeerListDiscovered;
   final void Function() checkSocketSleepState;
@@ -34,6 +35,7 @@ class MaglisPeerSession {
     required this.onNatFailure,
     required this.onStatesChanged,
     required this.onPacketReceived,
+    this.onChatMessageReceived,
     required this.onPeerClosed,
     required this.onPeerListDiscovered,
     required this.checkSocketSleepState,
@@ -819,9 +821,40 @@ class MaglisPeerSession {
         return;
       }
 
+      if (raw.contains('"t":97') || raw.contains('"type":"chat"')) {
+        try {
+          final m = jsonDecode(raw) as Map<String, dynamic>;
+          final u = m['u'] as String?;
+          if (u != null && u.isNotEmpty && u != localPeerId) {
+            final chatMsg = MaglisChatMessage.fromJson(m);
+            onChatMessageReceived?.call(chatMsg);
+            // Relay chat message to other connected mesh peers (1-hop relay)
+            _relayChatToOtherPeers(raw, senderId: u);
+          }
+        } catch (_) {}
+        return;
+      }
+
       final pkt = MaglisPacket.unpack(raw);
       handleIncomingPacket(pkt);
     } catch (_) {}
+  }
+
+  void _relayChatToOtherPeers(String raw, {required String senderId}) {
+    if (disposed || channels.length < 2) return;
+    final msg = RTCDataChannelMessage(raw);
+    for (final entry in List<MapEntry<String, RTCDataChannel>>.from(channels.entries)) {
+      final targetId = entry.key;
+      if (targetId == senderId || targetId == localPeerId || departedPeers.contains(targetId)) {
+        continue;
+      }
+      final dc = entry.value;
+      if (dc.state == RTCDataChannelState.RTCDataChannelOpen) {
+        try {
+          dc.send(msg);
+        } catch (_) {}
+      }
+    }
   }
 
   void _relayPacketToOtherPeers(MaglisPacket pkt) {

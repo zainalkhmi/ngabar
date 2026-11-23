@@ -568,7 +568,7 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
 
     final Color iconColor =
         (banner.isWarning && isDark) ? const Color(0xFFFBBF24) : accentColor;
-    final String message = isAr ? banner.messageAr : banner.messageEn;
+    final String message = banner.resolve(app);
 
     return Center(
       key: ValueKey(banner.id),

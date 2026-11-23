@@ -87,7 +87,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
   Widget build(BuildContext context) {
     final app = AppState.instance;
     final c = app.colors;
-    final isAr = app.isArabic;
+    final isId = app.isIndonesian;
     final isDark = app.isDarkMode;
 
     return ListenableBuilder(
@@ -105,7 +105,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
         final isDownloading = QuranDownloadService.instance.isDownloading.value;
 
         return Directionality(
-          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+          textDirection: TextDirection.ltr,
           child: AppDialog(
             maxWidth: 390,
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
@@ -117,11 +117,11 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
               padding: 12,
             ),
             title: isDownloading
-                ? (isAr ? 'جاري التحميل' : 'Downloading')
-                : (isAr ? 'تحميل التلاوة' : 'Download Recitation'),
+                ? (isId ? 'Mengunduh Murottal' : 'Downloading')
+                : (isId ? 'Unduh Audio Murottal' : 'Download Recitation'),
             content: isDownloading
-                ? _buildDownloading(c, isAr, isDark)
-                : _buildSelection(context, c, isAr, isDark),
+                ? _buildDownloading(c, isId, isDark)
+                : _buildSelection(context, c, isId, isDark),
           ),
         );
       },
@@ -132,7 +132,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
   Widget _buildSelection(
     BuildContext context,
     ThemeColors c,
-    bool isAr,
+    bool isId,
     bool isDark,
   ) {
     final allSelected = _selected.length == 114;
@@ -168,8 +168,8 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                   const SizedBox(width: 8),
                   Text(
                     allSelected
-                        ? (isAr ? 'إلغاء تحديد الكل' : 'Deselect All')
-                        : (isAr ? 'تحديد الكل' : 'Select All'),
+                        ? (isId ? 'Batal Pilih Semua' : 'Deselect All')
+                        : (isId ? 'Pilih Semua' : 'Select All'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       color: c.text,
@@ -181,9 +181,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
               ),
             ),
             Text(
-              isAr
-                  ? '${QuranTypography.toArabicDigits(_selected.length)} / ١١٤'
-                  : '${_selected.length} / 114',
+              '${_selected.length} / 114',
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: c.muted,
@@ -220,6 +218,9 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                 final s = idx + 1;
                 final isSel = _selected.contains(s);
                 final isDown = _downloaded.contains(s);
+                final app = context.read<AppState>();
+                final isAr = app.isArabic;
+                final isId = app.isIndonesian;
                 final name = QuranMetadata.getSurahNameArabic(s);
                 final sizeMb =
                     ((QuranMetadata.getAyahCount(s) * 95) / 1024).toStringAsFixed(1);
@@ -310,7 +311,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              isAr ? 'حجم التحميل' : 'Download Size',
+              isId ? 'Total Ukuran Unduhan' : 'Download Size',
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: c.muted,
@@ -322,12 +323,10 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
               _loading
                   ? '...'
                   : (_selected.isEmpty
-                      ? (isAr ? '٠ م.ب' : '0 MB')
+                      ? '0 MB'
                       : (remainingMb <= 0
-                          ? (isAr ? 'محمّلة بالكامل' : 'Cached')
-                          : (isAr
-                              ? '${QuranTypography.toArabicDigits(remainingMb.toStringAsFixed(1))} ميجابايت'
-                              : '${remainingMb.toStringAsFixed(1)} MB'))),
+                          ? (isId ? 'Sudah Diunduh' : 'Cached')
+                          : '${remainingMb.toStringAsFixed(1)} MB')),
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: remainingMb > 0 ? c.primary : const Color(0xFF10B981),
@@ -354,7 +353,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                   ),
                 ),
                 child: Text(
-                  isAr ? 'إلغاء' : 'Cancel',
+                  isId ? 'Batal' : 'Cancel',
                   style: TextStyle(
                     fontFamily: 'cairo',
                     color: c.muted,
@@ -380,7 +379,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                   ),
                 ),
                 child: Text(
-                  isAr ? 'تحميل' : 'Download',
+                  isId ? 'Mulai Unduh' : 'Download',
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,
@@ -396,7 +395,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
   }
 
   // ── Downloading View ──
-  Widget _buildDownloading(ThemeColors c, bool isAr, bool isDark) {
+  Widget _buildDownloading(ThemeColors c, bool isId, bool isDark) {
     final srv = QuranDownloadService.instance;
     final progress = srv.progress.value;
     final isPaused = srv.isPaused.value;
@@ -414,7 +413,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
-              isAr ? '${QuranTypography.toArabicDigits(percent)}٪' : '$percent%',
+              '$percent%',
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: c.primary,
@@ -424,9 +423,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
               ),
             ),
             Text(
-              isAr
-                  ? '${QuranTypography.toArabicDigits(srv.downloadedMb.value.toStringAsFixed(1))} / ${QuranTypography.toArabicDigits(srv.totalMb.value.toStringAsFixed(1))} م.ب'
-                  : '${srv.downloadedMb.value.toStringAsFixed(1)} / ${srv.totalMb.value.toStringAsFixed(1)} MB',
+              '${srv.downloadedMb.value.toStringAsFixed(1)} / ${srv.totalMb.value.toStringAsFixed(1)} MB',
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: c.muted,
@@ -460,7 +457,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
           children: [
             Expanded(
               child: Text(
-                msg.isNotEmpty ? msg : (isAr ? 'جاري التحميل...' : 'Downloading...'),
+                msg.isNotEmpty ? msg : (isId ? 'Mengunduh audio tilawah...' : 'Downloading...'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -473,9 +470,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
             ),
             const SizedBox(width: 8),
             Text(
-              isAr
-                  ? '${QuranTypography.toArabicDigits(srv.completedAyahs.value)} / ${QuranTypography.toArabicDigits(srv.totalAyahs.value)}'
-                  : '${srv.completedAyahs.value} / ${srv.totalAyahs.value}',
+              '${srv.completedAyahs.value} / ${srv.totalAyahs.value}',
               style: TextStyle(
                 fontFamily: 'cairo',
                 color: c.muted,
@@ -500,7 +495,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                 ),
               ),
               child: Text(
-                isAr ? 'إلغاء' : 'Cancel',
+                isId ? 'Batal' : 'Cancel',
                 style: TextStyle(
                   fontFamily: 'cairo',
                   color: c.red,
@@ -520,8 +515,8 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                 size: 22,
               ),
               tooltip: isPaused
-                  ? (isAr ? 'استئناف' : 'Resume')
-                  : (isAr ? 'إيقاف مؤقت' : 'Pause'),
+                  ? (isId ? 'Lanjutkan' : 'Resume')
+                  : (isId ? 'Jeda' : 'Pause'),
             ),
             const SizedBox(width: 4),
             ElevatedButton(
@@ -539,7 +534,7 @@ class _AudioDownloadDialogState extends State<AudioDownloadDialog> {
                 ),
               ),
               child: Text(
-                isAr ? 'تصغير' : 'Minimize',
+                isId ? 'Kecilkan' : 'Minimize',
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 14,

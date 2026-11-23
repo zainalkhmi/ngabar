@@ -24,6 +24,7 @@ class BottomActionBar extends StatelessWidget {
   final bool isInMaglis;
   final VoidCallback? onMaglisTap;
   final VoidCallback? onMaglisExitTap;
+  final VoidCallback? onMaglisChatTap;
   final String? maglisRoomCode;
   final int maglisPeerCount;
   final bool isRemoteReciting;
@@ -45,6 +46,7 @@ class BottomActionBar extends StatelessWidget {
     this.isInMaglis = false,
     this.onMaglisTap,
     this.onMaglisExitTap,
+    this.onMaglisChatTap,
     this.maglisRoomCode,
     this.maglisPeerCount = 0,
     this.isRemoteReciting = false,
@@ -344,6 +346,51 @@ class BottomActionBar extends StatelessWidget {
                                                 height: btnHeight,
                                                 dockHeight: dockHeight,
                                                 onTap: onSurahTap,
+                                              ),
+                                            ),
+                                            SizedBox(width: maglisGap),
+                                            Expanded(
+                                              flex: 10,
+                                              child: ValueListenableBuilder<int>(
+                                                valueListenable: MaglisController.instance.unreadChatCount,
+                                                builder: (context, unreadCount, _) {
+                                                  final bool hasUnread = unreadCount > 0;
+                                                  return Stack(
+                                                    clipBehavior: Clip.none,
+                                                    children: [
+                                                      _buildActionButton(
+                                                        child: Icon(
+                                                          Icons.chat_bubble_outline_rounded,
+                                                          size: 18.0,
+                                                          color: hasUnread
+                                                              ? const Color(0xFF10B981)
+                                                              : _btnFg(isDark),
+                                                        ),
+                                                        tooltip: app.isIndonesian
+                                                            ? 'Obrolan Majlis'
+                                                            : (isAr ? 'محادثة المجلس' : 'Majlis Chat'),
+                                                        isActive: hasUnread,
+                                                        isDark: isDark,
+                                                        height: btnHeight,
+                                                        dockHeight: dockHeight,
+                                                        onTap: onMaglisChatTap,
+                                                      ),
+                                                      if (hasUnread)
+                                                        Positioned(
+                                                          top: 3,
+                                                          right: 3,
+                                                          child: Container(
+                                                            width: 8,
+                                                            height: 8,
+                                                            decoration: const BoxDecoration(
+                                                              color: Color(0xFF10B981),
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  );
+                                                },
                                               ),
                                             ),
                                             SizedBox(width: maglisGap),

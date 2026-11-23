@@ -11,12 +11,14 @@ import 'settings_sheet.dart';
 import 'surah_picker_sheet.dart';
 import 'audio_download_dialog.dart';
 import 'donation_dialog.dart';
+import 'maglis_chat_dialog.dart';
 import 'dialog_base.dart';
 
 export 'app_alert_dialogs.dart' show PermissionReason;
 export 'package:recite_quran/recite_quran.dart' show VoiceSearchResult;
 export 'audio_download_dialog.dart' show AudioDownloadDialog;
 export 'donation_dialog.dart' show DonationDialog;
+export 'maglis_chat_dialog.dart' show MaglisChatSheet;
 export 'dialog_base.dart';
 
 /// Centralized Dialog Service facade.
@@ -202,5 +204,10 @@ abstract final class DialogService {
   /// Displays the Support & Donation modal dialog (QRIS).
   static Future<void> showDonation(BuildContext context) {
     return DonationDialog.show(context);
+  }
+
+  /// Displays the Maglis Chat modal bottom sheet.
+  static Future<void> showMaglisChat(BuildContext context) {
+    return MaglisChatSheet.show(context);
   }
 }

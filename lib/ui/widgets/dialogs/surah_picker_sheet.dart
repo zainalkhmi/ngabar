@@ -284,8 +284,8 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
                   Icons.format_list_bulleted_rounded,
                   Icons.auto_stories_rounded,
                 ],
-                labels: isAr
-                    ? const ['قائمة الآيات', 'مصحف']
+                labels: app.isIndonesian
+                    ? const ['Daftar Ayat', 'Tampilan Mushaf']
                     : const ['List View', 'Mushaf Layout'],
                 selected: app.isMushafMode ? 1 : 0,
                 c: c,
@@ -327,8 +327,8 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
-                        hintText: isAr
-                            ? 'ابحث باسم السورة أو رقمها...'
+                        hintText: app.isIndonesian
+                            ? 'Cari nama atau nomor surat...'
                             : 'Search by name or number...',
                         hintStyle: TextStyle(
                           color: c.textSecondary,
@@ -391,10 +391,10 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isAr ? 'بحث صوتي' : 'Voice Search',
+                          app.isIndonesian ? 'Cari Suara' : 'Voice Search',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: isAr ? 13 : 11.5,
+                            fontSize: app.isIndonesian ? 12 : 11.5,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -420,7 +420,7 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    isAr ? 'لم يتم العثور على سور' : 'No Surahs found',
+                    app.isIndonesian ? 'Surat tidak ditemukan' : 'No Surahs found',
                     style: TextStyle(
                       color: c.textSecondary,
                       fontSize: 13.5,

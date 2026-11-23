@@ -309,30 +309,37 @@ class ErrorDetailDialog extends StatelessWidget {
     Color accent;
     String advice = '';
 
+    final app = AppState.instance;
+    final bool isId = app.isIndonesian;
+
     if (e.errorType == ErrorCategory.tajweed) {
-      String ruleName = isAr
-          ? (e.expectedRule?.name.ar ?? '')
-          : (e.expectedRule?.name.en ?? '');
+      String ruleName = (e.expectedRule?.name.en ?? '');
       if (ruleName.isEmpty) {
-        ruleName = isAr ? 'حكم تجويد' : 'Tajweed Rule';
+        ruleName = isId ? 'Hukum Tajwid' : (isAr ? 'حكم تجويد' : 'Tajweed Rule');
       }
       title = ruleName;
       accent = c.primary; // Serene theme emerald
-      advice = isAr ? e.adviceAr : e.adviceEn;
+      advice = isId
+          ? (e.adviceEn.isNotEmpty ? e.adviceEn : e.adviceAr)
+          : (isAr ? e.adviceAr : e.adviceEn);
     } else if (e.errorType == ErrorCategory.tashkeel) {
-      title = isAr ? 'خطأ في التشكيل' : 'Vowel Mark';
+      title = isId ? 'Kesalahan Harakat' : (isAr ? 'خطأ في التشكيل' : 'Vowel Mark');
       accent = c.info;
-      advice = isAr ? e.adviceAr : e.adviceEn;
+      advice = isId
+          ? (e.adviceEn.isNotEmpty ? e.adviceEn : e.adviceAr)
+          : (isAr ? e.adviceAr : e.adviceEn);
     } else {
       if (e.speechErrorType == SpeechErrorType.insert) {
-        title = isAr ? 'إضافة حرف زائد' : 'Extra Letter';
+        title = isId ? 'Kelebihan Huruf' : (isAr ? 'إضافة حرف زائد' : 'Extra Letter');
       } else if (e.speechErrorType == SpeechErrorType.delete) {
-        title = isAr ? 'حرف ساقط' : 'Omitted Letter';
+        title = isId ? 'Huruf Tertinggal' : (isAr ? 'حرف ساقط' : 'Omitted Letter');
       } else {
-        title = isAr ? 'خطأ في النطق' : 'Pronunciation';
+        title = isId ? 'Pelafalan Huruf' : (isAr ? 'خطأ في النطق' : 'Pronunciation');
       }
       accent = c.red;
-      advice = isAr ? e.adviceAr : e.adviceEn;
+      advice = isId
+          ? (e.adviceEn.isNotEmpty ? e.adviceEn : e.adviceAr)
+          : (isAr ? e.adviceAr : e.adviceEn);
     }
 
     final Color cardBackground = isDark ? c.surfaceHigh : c.surface;
@@ -434,6 +441,7 @@ class ErrorDetailDialog extends StatelessWidget {
                       isAr,
                       isDark,
                       isCompact: isCompact,
+                      isId: isId,
                     ),
                     SizedBox(height: isCompact ? 8 : 14), // Longer space
                   ],
@@ -526,11 +534,14 @@ class ErrorDetailDialog extends StatelessWidget {
     final bool isOverheld = durationStatus == TajweedDurationStatus.overheld ||
         (durationStatus == null && actual > expected);
 
+    final app = AppState.instance;
+    final bool isId = app.isIndonesian;
+
     final String statusLabel = isUnderheld
-        ? (isAr ? 'نقص' : 'Underheld')
+        ? (isId ? 'Kurang Panjang' : (isAr ? 'نقص' : 'Underheld'))
         : isOverheld
-            ? (isAr ? 'زيادة' : 'Overheld')
-            : (isAr ? 'صحيح' : 'Valid');
+            ? (isId ? 'Terlalu Panjang' : (isAr ? 'زيادة' : 'Overheld'))
+            : (isId ? 'Sesuai' : (isAr ? 'صحيح' : 'Valid'));
 
     final Color statusColor = isUnderheld
         ? c.red
@@ -680,10 +691,10 @@ class ErrorDetailDialog extends StatelessWidget {
           // Line 4: Duration Advice Guidance (Protected with ellipsis)
           Text(
             isUnderheld
-                ? (isAr ? 'نقص: أطِل المد ↑' : 'Underheld: Hold longer ↑')
+                ? (isId ? 'Kurang: Panjangkan mad ↑' : (isAr ? 'نقص: أطِل المد ↑' : 'Underheld: Hold longer ↑'))
                 : isOverheld
-                    ? (isAr ? 'زيادة: لا تبالغ ↓' : 'Overheld: Avoid excess ↓')
-                    : (isAr ? 'المدة صحيحة ✓' : 'Duration is valid ✓'),
+                    ? (isId ? 'Kelebihan: Jangan berlebihan ↓' : (isAr ? 'زيادة: لا تبالغ ↓' : 'Overheld: Avoid excess ↓'))
+                    : (isId ? 'Panjang mad sudah tepat ✓' : (isAr ? 'المدة صحيحة ✓' : 'Duration is valid ✓')),
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: statusColor,
@@ -783,6 +794,7 @@ class ErrorDetailDialog extends StatelessWidget {
     bool isAr,
     bool isDark, {
     required bool isCompact,
+    bool isId = false,
   }) {
     final Color correctGreen = c.primary;
     final Color errorRed = c.red;
@@ -811,7 +823,7 @@ class ErrorDetailDialog extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                isAr ? 'نطقك' : 'Yours',
+                isId ? 'Bacaan Anda' : (isAr ? 'نطقك' : 'Yours'),
                 style: TextStyle(
                   color: errorRed,
                   fontSize: isCompact ? 10 : 12,
@@ -869,7 +881,7 @@ class ErrorDetailDialog extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                isAr ? 'الصواب' : 'Correct',
+                isId ? 'Yang Benar' : (isAr ? 'الصواب' : 'Correct'),
                 style: TextStyle(
                   color: correctGreen,
                   fontSize: isCompact ? 10 : 12,

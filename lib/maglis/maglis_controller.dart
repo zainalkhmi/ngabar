@@ -40,6 +40,38 @@ class MaglisController extends ChangeNotifier {
   final ChangeNotifier _sessionNotifier = ChangeNotifier();
   Listenable get sessionListenable => _sessionNotifier;
 
+  final List<MaglisChatMessage> _chatMessages = [];
+  List<MaglisChatMessage> get chatMessages => List.unmodifiable(_chatMessages);
+  final ValueNotifier<int> unreadChatCount = ValueNotifier<int>(0);
+  final ValueNotifier<MaglisChatMessage?> latestIncomingChat = ValueNotifier<MaglisChatMessage?>(null);
+
+  void markChatAsRead() {
+    unreadChatCount.value = 0;
+  }
+
+  void sendChatMessage(String text, {String? senderName}) {
+    final s = _session;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final id = '${localPeerId}_$ts';
+    final name = (senderName != null && senderName.trim().isNotEmpty)
+        ? senderName.trim()
+        : 'User ${localPeerId.substring(0, math.min(4, localPeerId.length))}';
+
+    final msg = MaglisChatMessage(
+      id: id,
+      senderId: localPeerId,
+      senderName: name,
+      text: trimmed,
+      ts: ts,
+      isLocal: true,
+    );
+    _chatMessages.add(msg);
+    s?.net.sendChatMessage(msg);
+    notifyListeners();
+  }
+
   void _notifySessionChanged() {
     _sessionNotifier.notifyListeners();
   }
@@ -200,6 +232,13 @@ class MaglisController extends ChangeNotifier {
       session.participantSub = net.onParticipantCount.listen((_) {
         if (_session != session) return;
         _notifySessionChanged();
+      });
+      session.chatSub = net.onChatMessage.listen((msg) {
+        if (_session != session) return;
+        _chatMessages.add(msg);
+        unreadChatCount.value++;
+        latestIncomingChat.value = msg;
+        notifyListeners();
       });
 
       // Connect and establish room presence across relays (throws if offline or unreachable)
@@ -896,6 +935,9 @@ class MaglisController extends ChangeNotifier {
     } catch (_) {}
 
     _session = null;
+    _chatMessages.clear();
+    unreadChatCount.value = 0;
+    latestIncomingChat.value = null;
     onSessionEnded?.call();
     onRemoteRecitationProgress?.call(
       surah: 1,

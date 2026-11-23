@@ -994,3 +994,42 @@ class MaglisPeerDiagnostics {
   String toString() =>
       'MaglisPeerDiagnostics(peerId: $peerId, rtt: ${rttMs}ms, state: $state, lastSeen: ${lastSeenMs}ms)';
 }
+
+/// Model for peer-to-peer text messages exchanged inside a Majlis session.
+class MaglisChatMessage {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String text;
+  final int ts;
+  final bool isLocal;
+
+  const MaglisChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.text,
+    required this.ts,
+    this.isLocal = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'u': senderId,
+        'n': senderName,
+        'm': text,
+        't': 97, // type 97 for chat message in wire protocol
+        'ts': ts,
+      };
+
+  factory MaglisChatMessage.fromJson(Map<String, dynamic> json, {bool isLocal = false}) {
+    return MaglisChatMessage(
+      id: (json['id'] as String?) ?? '${json['u']}_${json['ts']}',
+      senderId: (json['u'] as String?) ?? '',
+      senderName: (json['n'] as String?) ?? '',
+      text: (json['m'] as String?) ?? '',
+      ts: (json['ts'] as int?) ?? DateTime.now().millisecondsSinceEpoch,
+      isLocal: isLocal,
+    );
+  }
+}

@@ -72,10 +72,13 @@ class MaglisNetworkEngine {
       _peerSession.localStream?.getAudioTracks().firstOrNull?.id;
 
   final _packetCtrl = StreamController<MaglisPacket>.broadcast();
+  final _chatCtrl = StreamController<MaglisChatMessage>.broadcast();
   final _statesCtrl =
       StreamController<Map<String, RTCIceConnectionState>>.broadcast();
   final _natFailCtrl = StreamController<String>.broadcast();
   final _participantCountCtrl = StreamController<int>.broadcast();
+
+  Stream<MaglisChatMessage> get onChatMessage => _chatCtrl.stream;
 
   final ParticipantCollection remoteParticipants = ParticipantCollection();
   final Set<String> _admittedPeers = <String>{};
@@ -134,6 +137,14 @@ class MaglisNetworkEngine {
           _addOrUpdateParticipant(packet.senderId, dataChannelOpen: true);
         }
         _packetCtrl.add(packet);
+      },
+      onChatMessageReceived: (chatMsg) {
+        if (chatMsg.senderId.isNotEmpty &&
+            chatMsg.senderId != localPeerId &&
+            !_departedPeers.contains(chatMsg.senderId)) {
+          _addOrUpdateParticipant(chatMsg.senderId, dataChannelOpen: true);
+          _chatCtrl.add(chatMsg);
+        }
       },
       onPeerClosed: (peerId) {
         _removeParticipant(peerId);
@@ -728,6 +739,11 @@ class MaglisNetworkEngine {
 
   void sendPacket(MaglisPacket packet, {bool throttle = false}) {
     _peerSession.sendPacket(packet, throttle: throttle);
+  }
+
+  void sendChatMessage(MaglisChatMessage chatMessage) {
+    final raw = jsonEncode(chatMessage.toJson());
+    _peerSession.dispatchReliable(raw, isVital: true);
   }
 
   Future<void> sendSignalFast(

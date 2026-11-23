@@ -15,6 +15,7 @@ class MaglisActiveSession {
   final MaglisNetworkEngine net;
 
   StreamSubscription<MaglisPacket>? pktSub;
+  StreamSubscription<MaglisChatMessage>? chatSub;
   StreamSubscription<Map<String, RTCIceConnectionState>>? stateSub;
   StreamSubscription<String>? natSub;
   StreamSubscription<int>? participantSub;
@@ -89,10 +90,12 @@ class MaglisActiveSession {
     lastPreemptionRemindTs = 0;
     lastFloorReleaseOriginTsByPeer.clear();
     await pktSub?.cancel();
+    await chatSub?.cancel();
     await stateSub?.cancel();
     await natSub?.cancel();
     await participantSub?.cancel();
     pktSub = null;
+    chatSub = null;
     stateSub = null;
     natSub = null;
     participantSub = null;
