@@ -57,7 +57,7 @@ class MaglisController extends ChangeNotifier {
     final id = '${localPeerId}_$ts';
     final name = (senderName != null && senderName.trim().isNotEmpty)
         ? senderName.trim()
-        : 'User ${localPeerId.substring(0, math.min(4, localPeerId.length))}';
+        : 'User ${localPeerId.substring(0, min(4, localPeerId.length))}';
 
     final msg = MaglisChatMessage(
       id: id,

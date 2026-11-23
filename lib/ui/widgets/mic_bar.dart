@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/platform_utils.dart';
 import '../../core/app_state.dart';
 import '../../maglis/maglis_core.dart';
+import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 
 enum MicBarMode { recording, maglis, normal }
@@ -373,7 +374,7 @@ class BottomActionBar extends StatelessWidget {
                                                         isDark: isDark,
                                                         height: btnHeight,
                                                         dockHeight: dockHeight,
-                                                        onTap: onMaglisChatTap,
+                                                        onTap: onMaglisChatTap ?? () {},
                                                       ),
                                                       if (hasUnread)
                                                         Positioned(
