@@ -624,25 +624,10 @@ class BottomActionBar extends StatelessWidget {
               )
             : (isRecording
                 ? const _AudioWaveform()
-                : const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.mic_rounded,
-                        color: Colors.white,
-                        size: 23.5,
-                      ),
-                      SizedBox(height: 1),
-                      Text(
-                        'AI',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 7.0,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
+                : const Icon(
+                    Icons.mic_rounded,
+                    color: Colors.white,
+                    size: 26.0,
                   )),
       ),
     );
@@ -1317,36 +1302,14 @@ class _AudioWaveformState extends State<_AudioWaveform>
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 22,
-            height: 14,
-            child: AnimatedBuilder(
-              animation: _ctrl,
-              builder: (context, _) =>
-                  CustomPaint(painter: _WaveformPainter(_ctrl.value)),
-            ),
-          ),
-          const SizedBox(height: 1.5),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.8),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.28),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Text(
-              'AI ON',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 6.8,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-        ],
+      child: SizedBox(
+        width: 24,
+        height: 18,
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (context, _) =>
+              CustomPaint(painter: _WaveformPainter(_ctrl.value)),
+        ),
       ),
     );
   }

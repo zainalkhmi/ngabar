@@ -8,6 +8,7 @@ import '../core/highlighting_controller.dart';
 import '../audio/quran_timing_service.dart';
 import '../audio/quran_audio_service.dart';
 import '../audio/quran_download_service.dart';
+import '../audio/camcorder_sound_helper.dart';
 import '../core/platform_utils.dart';
 import 'widgets/dialogs/dialog_service.dart';
 import '../core/app_state.dart';
@@ -417,6 +418,9 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 c: c,
                                 onMic: () {
                                   app.dismissBanner();
+                                  CamcorderSoundHelper.instance.playRecordChime(
+                                    isStart: !widget.isRecording,
+                                  );
                                   if (widget.isVoiceSearching) {
                                     widget.onVoiceSearchToggle();
                                   } else {
