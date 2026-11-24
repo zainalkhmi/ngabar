@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../audio/camcorder_sound_helper.dart';
 import '../../../audio/quran_download_service.dart';
 import '../../../audio/quran_audio_service.dart';
 import '../../../core/app_state.dart';
@@ -424,6 +425,26 @@ class SettingsSheet extends StatelessWidget {
                           Navigator.of(context).pop();
                           _showEditNameDialog(context, app, isDark, isId, c);
                         },
+                      ),
+
+                      // 6. Peringatan Kesalahan (Suara & Getar)
+                      SettingDivider(c: c),
+                      SettingTile(
+                        icon: Icons.vibration_rounded,
+                        title: isId
+                            ? 'Peringatan Kesalahan (Suara & Getar)'
+                            : 'Mistake Alert (Sound & Vibrate)',
+                        c: c,
+                        trailing: Switch.adaptive(
+                          value: app.mistakeAlertEnabled,
+                          activeThumbColor: const Color(0xFF10B981),
+                          onChanged: (val) {
+                            app.setMistakeAlertEnabled(val);
+                            if (val) {
+                              CamcorderSoundHelper.instance.playMistakeAlert();
+                            }
+                          },
+                        ),
                       ),
 
                       // 6. Recite Player (Murottal Audio Tilawah)

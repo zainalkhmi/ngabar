@@ -208,6 +208,17 @@ class AppState extends ChangeNotifier {
   String _maglisUserName = '';
   String get maglisUserName => _maglisUserName;
 
+  bool _mistakeAlertEnabled = true;
+  bool get mistakeAlertEnabled => _mistakeAlertEnabled;
+
+  Future<void> setMistakeAlertEnabled(bool value) async {
+    if (_mistakeAlertEnabled == value) return;
+    _mistakeAlertEnabled = value;
+    notifyListeners();
+    final prefs = await _getPrefs();
+    await prefs.setBool('mistake_alert_enabled', value);
+  }
+
   Future<void> setMaglisUserName(String name) async {
     final clean = name.trim().toUpperCase();
     final truncated = clean.length > 4 ? clean.substring(0, 4) : clean;
@@ -853,6 +864,7 @@ class AppState extends ChangeNotifier {
       mushafAudioClickCount = prefs.getInt('mushaf_audio_click_count') ?? 0;
       maglisCommunityTapCount = prefs.getInt('maglis_community_tap_count') ?? 0;
       _maglisUserName = prefs.getString('maglis_user_name') ?? '';
+      _mistakeAlertEnabled = prefs.getBool('mistake_alert_enabled') ?? true;
 
       final seenBanners = prefs.getStringList('seen_banner_ids');
       if (seenBanners != null) {

@@ -4,6 +4,7 @@ import 'package:recite_quran/recite_quran.dart' as rq;
 export 'package:recite_quran/recite_quran.dart' hide HighlightingController;
 
 import 'app_state.dart';
+import '../audio/camcorder_sound_helper.dart';
 import '../audio/quran_audio_service.dart';
 import '../ui/widgets/dialogs/dialog_service.dart';
 
@@ -63,6 +64,9 @@ class HighlightStore {
   // Fast count of highlights per (surah, ayah)
   final Map<int, int> _ayahHighlightCounts = {};
 
+  /// Callback fired when an individual word transitions to red (mistake detected).
+  void Function(int surah, int ayah, int wordIndex)? onMistakeDetected;
+
   // ── Writes ──
 
   void setWordStatus(
@@ -83,6 +87,9 @@ class HighlightStore {
       _errors[key] = errors;
     } else if (status != 2 || prev != 2) {
       _errors.remove(key);
+    }
+    if (status == 3 && prev != 3) {
+      onMistakeDetected?.call(surah, ayah, wordIndex);
     }
     // Re-asserting yellow without new error detail (e.g. a cumulative
     // snapshot merge) keeps the stored detail: absent evidence never erases
@@ -262,7 +269,14 @@ class HighlightingController extends rq.HighlightingController {
     super.onAyahChanged,
     super.isTajweed = true,
     super.config = const rq.TrackerConfig(),
-  });
+  }) {
+    _store.onMistakeDetected = (surah, ayah, wordIndex) {
+      if (activeSource == RecitationSource.localAsr ||
+          activeSource == RecitationSource.maglisRemote) {
+        CamcorderSoundHelper.instance.playMistakeAlert();
+      }
+    };
+  }
 
   // ── Package → Controller ingestion (the only read boundary) ──
 

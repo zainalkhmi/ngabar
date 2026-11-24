@@ -43,6 +43,7 @@ import 'mushaf/web/mushaf_web_storage.dart'
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'audio/camcorder_sound_helper.dart';
 import 'audio/quran_audio_handler.dart';
 import 'audio/quran_audio_service.dart';
 import 'audio/quran_download_service.dart';
@@ -53,6 +54,7 @@ void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      unawaited(CamcorderSoundHelper.instance.init());
 
       // Initialize Windows audio backend as in reference app (alquranalkareem / quran_library)
       if (PlatformCapabilities.usesMediaKitAudio) {
@@ -951,6 +953,9 @@ class _OrchestratorState extends State<_Orchestrator>
           _isToggling = false;
           return;
         }
+
+        // Give sonification audio player a brief headstart before mic locks hardware buffer
+        await Future<void>.delayed(const Duration(milliseconds: 30));
 
         // Ensure engine is ready
         if (!await _ensureEngineReady()) {
