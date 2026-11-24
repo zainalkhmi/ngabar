@@ -110,10 +110,9 @@ class BottomActionBar extends StatelessWidget {
                 stdBtnWidth +
                 1.0;
 
-            // Ensures 3-digit page numbers on narrow screens remain visible and right next to the bar
-            final double maglisLeftClearance = isNarrow ? 64.0 : 50.0;
-            final double maglisWidth =
-                math.max(200.0, maxW - maglisLeftClearance);
+            final double maglisWidth = math.min(maxW - 16.0, 520.0);
+            final double maglisRightMargin =
+                math.max(8.0, (maxW - maglisWidth) / 2.0);
 
             final double targetWidth = switch (mode) {
               MicBarMode.recording => recordingWidth,
@@ -124,7 +123,9 @@ class BottomActionBar extends StatelessWidget {
             final double normalRightMargin =
                 math.max(10.0, (maxW - normalWidth) / 2.0);
             final double rightMargin =
-                (mode == MicBarMode.maglis || mode == MicBarMode.maglisRecording) ? 8.0 : normalRightMargin;
+                (mode == MicBarMode.maglis || mode == MicBarMode.maglisRecording)
+                    ? maglisRightMargin
+                    : normalRightMargin;
 
             final double minNormalActionWidth =
                 (stdBtnWidth * 2.0) + (gap * 2.0) + 68.0;

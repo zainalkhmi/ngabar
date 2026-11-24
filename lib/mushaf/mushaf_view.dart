@@ -1132,13 +1132,11 @@ class _MushafViewState extends State<MushafView>
 
     final double topPadding = safeTop > 0 ? safeTop + 4.0 : 8.0;
 
-    final bool isSessionActive =
-        widget.isRecording || MaglisController.instance.inSession;
+    // Keep page number clearly positioned ABOVE the bottom dock controls,
+    // as an authentic, integral element of the Mushaf page.
+    final double pageLabelBottom = safeBottom + 70.0;
 
-    final double pageLabelBottom =
-        isSessionActive ? (safeBottom + 27.0) : (safeBottom + 60.0);
-
-    final double bottomPadding = safeBottom + 74.0;
+    final double bottomPadding = safeBottom + 90.0;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -1229,8 +1227,8 @@ class _MushafViewState extends State<MushafView>
                             textScaler: TextScaler.noScaling,
                             style: TextStyle(
                               fontFamily: 'cairo',
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.w700,
                               color: c.textSecondary,
                               height: 1.0,
                             ),
