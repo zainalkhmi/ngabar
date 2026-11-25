@@ -844,6 +844,29 @@ class BottomActionBar extends StatelessWidget {
                           height: 1.05,
                         ),
                       ),
+                      if (MaglisController.instance.isHost) ...[
+                        const SizedBox(width: 4.0),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1.0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.30 : 0.15),
+                            borderRadius: BorderRadius.circular(3.5),
+                            border: Border.all(
+                              color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.50 : 0.35),
+                              width: 0.7,
+                            ),
+                          ),
+                          child: const Text(
+                            'USTADZ',
+                            style: TextStyle(
+                              fontSize: 7.5,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF10B981),
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
                       Container(
                         width: 1.0,
                         height: 14.0,

@@ -1034,7 +1034,7 @@ class MaglisChatMessage {
   }
 }
 
-/// Action types for Tadarus Turn-Taking and Host/Moderator controls (Wire protocol type 96).
+/// Action types for Tadarus Turn-Taking, Host/Moderator controls, and Talaqqi Classroom (Wire protocol type 96).
 enum TadarusControlAction {
   raiseHand,       // Participant raises hand to join reading queue
   lowerHand,       // Participant cancels queue / lowers hand
@@ -1042,6 +1042,7 @@ enum TadarusControlAction {
   syncQueue,       // Host synchronizes the active queue list across room
   manualCorrection,// Ustadz/Host taps a word to mark it as error (Simakan)
   muteAll,         // Host requests all peers to mute mic
+  setAyahLimit,    // Host/Ustadz sets auto ayah limit per turn (0 = free, 3, 5, 7, 10)
 }
 
 /// Wire model for Tadarus Turn-Taking, Queue, and Simakan Corrections.
@@ -1054,7 +1055,8 @@ class TadarusControlPacket {
   final int? surah;
   final int? ayah;
   final int? wordIndex;
-  final int? errorColor; // 1 = Yellow, 2 = Red
+  final int? errorColor; // 1 = Yellow, 2 = Red, 3 = Harakat (Jali), 4 = Mad (Khafi), 5 = Ghunnah (Khafi)
+  final int? ayahLimit;  // Target ayah count per turn (0 = free)
   final int ts;
 
   const TadarusControlPacket({
@@ -1067,6 +1069,7 @@ class TadarusControlPacket {
     this.ayah,
     this.wordIndex,
     this.errorColor,
+    this.ayahLimit,
     required this.ts,
   });
 
@@ -1081,6 +1084,7 @@ class TadarusControlPacket {
         if (ayah != null) 'ay': ayah,
         if (wordIndex != null) 'w': wordIndex,
         if (errorColor != null) 'c': errorColor,
+        if (ayahLimit != null) 'lim': ayahLimit,
         'ts': ts,
       };
 
@@ -1096,6 +1100,7 @@ class TadarusControlPacket {
       ayah: json['ay'] as int?,
       wordIndex: json['w'] as int?,
       errorColor: json['c'] as int?,
+      ayahLimit: json['lim'] as int?,
       ts: (json['ts'] as int?) ?? DateTime.now().millisecondsSinceEpoch,
     );
   }

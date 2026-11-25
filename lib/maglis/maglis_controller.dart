@@ -52,6 +52,12 @@ class MaglisController extends ChangeNotifier {
   bool get isHandRaised => _tadarusQueue.contains(localPeerId);
   String? get nextInQueue => _tadarusQueue.isNotEmpty ? _tadarusQueue.first : null;
 
+  // ── Auto Ayah Target per Turn (0 = Free/Bebas, 3, 5, 7, 10 Ayat) ──
+  int _targetAyahCount = 0;
+  int get targetAyahCount => _targetAyahCount;
+  int _sessionCompletedAyahs = 0;
+  int get sessionCompletedAyahs => _sessionCompletedAyahs;
+
   void markChatAsRead() {
     unreadChatCount.value = 0;
   }
@@ -133,6 +139,47 @@ class MaglisController extends ChangeNotifier {
         ayah: s.remoteAyah,
       );
     }
+    notifyListeners();
+  }
+
+  /// Host sets the target ayah count limit per turn across the room (0 = bebas).
+  void setAyahTargetLimit(int count) {
+    _targetAyahCount = count;
+    final s = _session;
+    if (s != null && s.isHost) {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      s.net.sendTadarusControl(TadarusControlPacket(
+        action: TadarusControlAction.setAyahLimit,
+        senderId: localPeerId,
+        ayahLimit: count,
+        ts: ts,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// Increments local completed ayah counter during active recitation.
+  /// If target limit is reached, triggers gentle pass-turn suggestion.
+  void notifyAyahCompleted(int surah, int ayah) {
+    if (!isLocalReciting) return;
+    _sessionCompletedAyahs++;
+    notifyListeners();
+
+    if (_targetAyahCount > 0 && _sessionCompletedAyahs >= _targetAyahCount) {
+      AppState.instance.showBanner(AppBannerInfo(
+        id: 'target_ayah_reached',
+        messageAr: 'تم بلوغ الهدف المحدد ($_targetAyahCount آيات)! يمكنك تمرير الدور للتالي',
+        messageEn: 'Reached target limit ($_targetAyahCount verses)! You can pass turn to next reciter',
+        messageId: 'Target $_targetAyahCount ayat tercapai! Tekan Oper Giliran untuk peserta berikutnya',
+        icon: Icons.check_circle_outline_rounded,
+        customDuration: const Duration(seconds: 5),
+      ));
+    }
+  }
+
+  /// Resets completed ayah counter when local user starts reciting.
+  void resetCompletedAyahsCounter() {
+    _sessionCompletedAyahs = 0;
     notifyListeners();
   }
 
@@ -303,6 +350,22 @@ class MaglisController extends ChangeNotifier {
           ));
         }
         break;
+
+      case TadarusControlAction.setAyahLimit:
+        if (pkt.ayahLimit != null) {
+          _targetAyahCount = pkt.ayahLimit!;
+          final limitStr = _targetAyahCount == 0 ? 'Bebas' : '$_targetAyahCount Ayat';
+          AppState.instance.showBanner(AppBannerInfo(
+            id: 'ayah_limit_updated',
+            messageAr: 'تم تحديث هدف التلاوة لكل دور: $limitStr',
+            messageEn: 'Target recitation per turn set to: $limitStr',
+            messageId: 'Target giliran membaca disetel: $limitStr oleh Host',
+            icon: Icons.flag_rounded,
+            customDuration: const Duration(seconds: 4),
+          ));
+          notifyListeners();
+        }
+        break;
     }
   }
 
@@ -355,6 +418,7 @@ class MaglisController extends ChangeNotifier {
   String get roomCode => _session?.roomCode ?? '';
   String get localPeerId => _session?.localPeerId ?? _fallbackPeerId;
   bool get isHost => _session?.isHost ?? false;
+  String? get roomHostPeerId => isHost ? localPeerId : null;
   String? get activeReciterId => _session?.activeReciterId;
   String? get natFailedPeer => _session?.natFailedPeer;
   int get participantCount => _session?.net.participantCount ?? 1;

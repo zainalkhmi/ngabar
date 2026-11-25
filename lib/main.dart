@@ -1053,6 +1053,7 @@ class _OrchestratorState extends State<_Orchestrator>
           _ctrl!.setRemoteReciting(false);
           _ctrl!.startRecordingSession();
           if (MaglisController.instance.inSession) {
+            MaglisController.instance.resetCompletedAyahsCounter();
             unawaited(MaglisController.instance.claimFloor(
               page: mappedPage ?? currentPage,
               surah: selectedSurah,
@@ -1147,6 +1148,9 @@ class _OrchestratorState extends State<_Orchestrator>
             _lastProcessedSurah != targetSurah)) {
       final prevAyah = _lastProcessedAyah!;
       final prevSurah = _lastProcessedSurah!;
+      // Notify completed ayah to track progress against session target (without touching ASR)
+      maglis.notifyAyahCompleted(prevSurah, prevAyah);
+
       final prevVerse = _ctrl!.repository.getVerse(prevSurah, prevAyah);
       final prevWordCount = prevVerse?.uthmaniWords.length ?? 0;
       final prevClassification = _ctrl!.extractAyahWordClassification(

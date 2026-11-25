@@ -202,7 +202,18 @@ class _MaglisChatSheetState extends State<MaglisChatSheet> {
                         ],
                       ),
                     ),
-                    if (MaglisController.instance.isHost)
+                    if (MaglisController.instance.isHost) ...[
+                      IconButton(
+                        tooltip: isId ? 'Atur Target Ayat' : 'Set Ayah Limit',
+                        icon: const Icon(
+                          Icons.flag_rounded,
+                          color: Color(0xFF10B981),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          _showTargetLimitDialog(context, isDark, isId, c);
+                        },
+                      ),
                       IconButton(
                         tooltip: isId ? 'Bisukan Semua (Mute All)' : 'Mute All',
                         icon: const Icon(
@@ -222,6 +233,7 @@ class _MaglisChatSheetState extends State<MaglisChatSheet> {
                           ));
                         },
                       ),
+                    ],
                     IconButton(
                       icon: Icon(
                         Icons.close_rounded,
@@ -321,16 +333,47 @@ class _MaglisChatSheetState extends State<MaglisChatSheet> {
                                     : CrossAxisAlignment.start,
                                 children: [
                                   if (!isMe) ...[
-                                    Text(
-                                      msg.senderName,
-                                      style: TextStyle(
-                                        fontFamily: 'cairo',
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: isDark
-                                            ? const Color(0xFF60A5FA)
-                                            : const Color(0xFF2563EB),
-                                      ),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          msg.senderName,
+                                          style: TextStyle(
+                                            fontFamily: 'cairo',
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? const Color(0xFF60A5FA)
+                                                : const Color(0xFF2563EB),
+                                          ),
+                                        ),
+                                        if (msg.senderId == MaglisController.instance.roomHostPeerId) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF10B981)
+                                                  .withValues(alpha: isDark ? 0.25 : 0.15),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: const Color(0xFF10B981)
+                                                    .withValues(alpha: isDark ? 0.45 : 0.3),
+                                                width: 0.7,
+                                              ),
+                                            ),
+                                            child: const Text(
+                                              'USTADZ',
+                                              style: TextStyle(
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.w900,
+                                                color: Color(0xFF10B981),
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                     const SizedBox(height: 2),
                                   ],
@@ -455,6 +498,116 @@ class _MaglisChatSheetState extends State<MaglisChatSheet> {
           ),
         );
       },
+    );
+  }
+
+  void _showTargetLimitDialog(
+    BuildContext context,
+    bool isDark,
+    bool isId,
+    ThemeColors c,
+  ) {
+    final currentLimit = MaglisController.instance.targetAyahCount;
+    final options = [0, 3, 5, 7, 10];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981)
+                          .withValues(alpha: isDark ? 0.20 : 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.flag_rounded,
+                        color: Color(0xFF10B981), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isId ? 'Target Ayat Per Giliran' : 'Ayah Target Per Turn',
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isId
+                    ? 'Saat santri mencapai target jumlah ayat, aplikasi akan menyarankan pergantian giliran secara otomatis.'
+                    : 'When a reciter reaches the target verses, the app gently advises passing turn.',
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 12,
+                  color: c.muted,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: options.map((opt) {
+                  final isSelected = currentLimit == opt;
+                  final label = opt == 0 ? (isId ? 'Bebas' : 'Free') : '$opt Ayat';
+                  return ChoiceChip(
+                    label: Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? Colors.white
+                            : (isDark ? Colors.white70 : const Color(0xFF0F172A)),
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFF10B981),
+                    backgroundColor: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
+                    onSelected: (val) {
+                      if (val) {
+                        MaglisController.instance.setAyahTargetLimit(opt);
+                        Navigator.of(ctx).pop();
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    isId ? 'Tutup' : 'Close',
+                    style: TextStyle(color: c.muted),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
