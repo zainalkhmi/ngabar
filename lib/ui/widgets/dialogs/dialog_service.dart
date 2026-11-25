@@ -12,13 +12,20 @@ import 'surah_picker_sheet.dart';
 import 'audio_download_dialog.dart';
 import 'donation_dialog.dart';
 import 'maglis_chat_dialog.dart';
+import 'mistake_compare_dialog.dart';
+import 'screen_recordings_sheet.dart';
 import 'dialog_base.dart';
+import '../../../audio/mistake_audio_service.dart';
+import '../../../audio/screen_recording_service.dart';
 
 export 'app_alert_dialogs.dart' show PermissionReason;
 export 'package:recite_quran/recite_quran.dart' show VoiceSearchResult;
 export 'audio_download_dialog.dart' show AudioDownloadDialog;
 export 'donation_dialog.dart' show DonationDialog;
 export 'maglis_chat_dialog.dart' show MaglisChatSheet;
+export 'mistake_compare_dialog.dart' show MistakeCompareDialog;
+export 'screen_recordings_sheet.dart'
+    show ScreenRecordingsSheet, RecordingPreviewDialog;
 export 'dialog_base.dart';
 
 /// Centralized Dialog Service facade.
@@ -28,6 +35,33 @@ export 'dialog_base.dart';
 abstract final class DialogService {
   /// Standard modal barrier dimming color across all application dialogs & sheets.
   static final Color barrierColor = DialogTokens.barrierColor;
+
+  /// Opens the Mistake Audio Comparison bottom sheet (User Recording vs Qari).
+  static Future<void> showMistakeCompare(
+    BuildContext context, {
+    required MistakeAudioClip clip,
+  }) {
+    return MistakeCompareDialog.show(context, clip: clip);
+  }
+
+  /// Opens the Screen Recordings Storage & Share library sheet.
+  static Future<void> showScreenRecordings(
+    BuildContext context, {
+    VoidCallback? onStartRecordTap,
+  }) {
+    return ScreenRecordingsSheet.show(
+      context,
+      onStartRecordTap: onStartRecordTap,
+    );
+  }
+
+  /// Opens the In-App Screen Recording Video Preview & Share dialog.
+  static Future<void> showRecordingPreview(
+    BuildContext context, {
+    required SavedScreenRecording recording,
+  }) {
+    return RecordingPreviewDialog.show(context, recording: recording);
+  }
 
   /// Opens the Tajweed Phonetic Error breakdown bottom sheet.
   static void showTajweedError(

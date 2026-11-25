@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../audio/camcorder_sound_helper.dart';
 import '../../../audio/quran_download_service.dart';
 import '../../../audio/quran_audio_service.dart';
+import '../../../audio/screen_recording_service.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
 import 'dialog_service.dart';
@@ -346,6 +347,57 @@ class SettingsSheet extends StatelessWidget {
 
                       // 3. Offline Audio & Timing Download
                       QuranDownloadTile(c: c, isAr: isAr, isDark: isDark),
+
+                      // 3b. Rekaman Layar & Penyimpanan
+                      SettingDivider(c: c),
+                      ListenableBuilder(
+                        listenable: Listenable.merge([
+                          ScreenRecordingService.instance.recordingsNotifier,
+                          ScreenRecordingService.instance.totalBytesNotifier,
+                        ]),
+                        builder: (context, _) {
+                          final recs = ScreenRecordingService
+                              .instance.recordingsNotifier.value;
+                          final bytes = ScreenRecordingService
+                              .instance.totalBytesNotifier.value;
+                          final sizeStr =
+                              SavedScreenRecording.formatBytes(bytes);
+                          return SettingTile(
+                            icon: Icons.video_library_rounded,
+                            title: isId
+                                ? 'Rekaman Layar & Storage'
+                                : 'Screen Recordings & Storage',
+                            c: c,
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: isDark ? 0.18 : 0.10),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: isDark ? 0.35 : 0.22),
+                                ),
+                              ),
+                              child: Text(
+                                recs.isEmpty
+                                    ? (isId ? 'Kosong' : 'Empty')
+                                    : '${recs.length} · $sizeStr',
+                                style: const TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              DialogService.showScreenRecordings(context);
+                            },
+                          );
+                        },
+                      ),
 
                       // 4. Dukung Pengembangan Aplikasi
                       SettingDivider(c: c),

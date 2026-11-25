@@ -5,6 +5,7 @@ export 'package:recite_quran/recite_quran.dart' hide HighlightingController;
 
 import 'app_state.dart';
 import '../audio/camcorder_sound_helper.dart';
+import '../audio/mistake_audio_service.dart';
 import '../audio/quran_audio_service.dart';
 import '../ui/widgets/dialogs/dialog_service.dart';
 
@@ -274,6 +275,21 @@ class HighlightingController extends rq.HighlightingController {
       if (activeSource == RecitationSource.localAsr ||
           activeSource == RecitationSource.maglisRemote) {
         CamcorderSoundHelper.instance.playMistakeAlert();
+      }
+      if (activeSource == RecitationSource.localAsr) {
+        final verse = repository.getVerse(surah, ayah);
+        String wordText = '';
+        if (verse != null &&
+            wordIndex >= 0 &&
+            wordIndex < verse.uthmaniWords.length) {
+          wordText = verse.uthmaniWords[wordIndex];
+        }
+        MistakeAudioService.instance.scheduleMistakeCapture(
+          surah: surah,
+          ayah: ayah,
+          wordIndex: wordIndex,
+          wordText: wordText,
+        );
       }
     };
   }
@@ -1059,6 +1075,7 @@ class HighlightingController extends rq.HighlightingController {
   /// Clears highlights from [startAyah] onwards in [surah], and clears all highlights
   /// in subsequent Surahs ([surah] + 1 .. 114). Prior verses and Surahs are strictly preserved.
   void clearHighlightsForwardFrom(int surah, int startAyah) {
+    MistakeAudioService.instance.clearFrom(surah, startAyah);
     clearHighlightsFromAyah(startAyah, surah: surah);
     for (int s = surah + 1; s <= QuranMetadata.maxSurah; s++) {
       clearHighlightsForSurah(s);
@@ -1673,6 +1690,17 @@ abstract final class QuranInteractionService {
       );
       onWordErrorTap?.call();
       return;
+    }
+
+    // ── 1b. Red Word with Recorded Mistake Snippet ──
+    if (controller.isWordRed(ayah, wordIndex, surah: surah)) {
+      final mistakeClip =
+          MistakeAudioService.instance.getClip(surah, ayah, wordIndex);
+      if (mistakeClip != null) {
+        DialogService.showMistakeCompare(context, clip: mistakeClip);
+        onWordErrorTap?.call();
+        return;
+      }
     }
 
     // ── 2. Word Play ──

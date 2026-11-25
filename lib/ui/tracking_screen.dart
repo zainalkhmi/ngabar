@@ -5,10 +5,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../core/highlighting_controller.dart';
+import '../audio/mistake_audio_service.dart';
 import '../audio/quran_timing_service.dart';
 import '../audio/quran_audio_service.dart';
 import '../audio/quran_download_service.dart';
 import '../audio/camcorder_sound_helper.dart';
+import '../audio/screen_recording_service.dart';
 import '../core/platform_utils.dart';
 import 'widgets/dialogs/dialog_service.dart';
 import '../core/app_state.dart';
@@ -89,6 +91,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       app.modeNotifier,
       _surahNotifier,
       MaglisController.instance.sessionListenable,
+      ScreenRecordingService.instance.isRecordingNotifier,
     ]);
     if (!PlatformCapabilities.isWeb) {
       WidgetsBinding.instance.addObserver(this);
@@ -362,6 +365,28 @@ class _TrackingScreenState extends State<TrackingScreen>
     );
   }
 
+  Future<void> _toggleScreenRecording() async {
+    final sr = ScreenRecordingService.instance;
+    if (sr.isRecordingNotifier.value) {
+      await sr.stopRecording();
+      return;
+    }
+    final app = AppState.instance;
+    final maglis = MaglisController.instance;
+    final int surah = _effectiveSurah;
+    final String surahName = _getSurahName(surah, app.isArabic);
+    final int ayah = widget.controller.activeAyah.value ?? app.lastAyah;
+
+    await sr.startRecording(
+      isMaglis: maglis.inSession,
+      surah: surah,
+      surahName: surahName,
+      ayah: ayah,
+      isExternalMicActive: widget.isRecording || widget.isVoiceSearching,
+      maglisRoomCode: maglis.inSession ? maglis.roomCode : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
@@ -455,6 +480,24 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 onSettingsTap: () {
                                   _showSettingsDialog();
                                 },
+                                isVoiceSearching: widget.isVoiceSearching,
+                                onVoiceSearchTap: () {
+                                  app.dismissBanner();
+                                  widget.onVoiceSearchToggle();
+                                },
+                                isScreenRecording: ScreenRecordingService
+                                    .instance.isRecordingNotifier.value,
+                                onScreenRecordTap: () {
+                                  app.dismissBanner();
+                                  unawaited(_toggleScreenRecording());
+                                },
+                                onOpenRecordingsTap: () {
+                                  DialogService.showScreenRecordings(
+                                    context,
+                                    onStartRecordTap: () =>
+                                        unawaited(_toggleScreenRecording()),
+                                  );
+                                },
                                 onPlayReciteTap: () async {
                                   final player = QuranAudioService.instance;
                                   if (player.isPlayingNotifier.value) {
@@ -526,6 +569,10 @@ class _TrackingScreenState extends State<TrackingScreen>
                         ),
                       ),
 
+                    // Floating Status Pills (Majlis Room Pill + Mistake Comparison Pill)
+                    if (!widget.isVoiceSearching)
+                      _buildFloatingStatusPills(c, app, bottom, pageLabelLeft),
+
                     // Modern Floating Slide-Up Banner (Scoped listener prevents full screen rebuilds)
                     ValueListenableBuilder<AppBannerInfo?>(
                       valueListenable: app.bannerNotifier,
@@ -538,6 +585,422 @@ class _TrackingScreenState extends State<TrackingScreen>
                   ],
                 );
               },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Floating compact pills sitting cleanly in the bottom safe margin above the dock:
+  /// - Mistake Comparison Pill (when mistake snippets were captured)
+  /// - Majlis Room Status Pill (when in an active Majlis session)
+  Widget _buildFloatingStatusPills(
+      ThemeColors c, AppState app, double bottom, double pageLabelLeft) {
+    final safeRight = MediaQuery.paddingOf(context).right;
+    final maglis = MaglisController.instance;
+    final sr = ScreenRecordingService.instance;
+
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        MistakeAudioService.instance.clipCountNotifier,
+        maglis,
+        app.bannerNotifier,
+        sr.isRecordingNotifier,
+        sr.elapsedSecondsNotifier,
+        sr.latestCompletedNotifier,
+      ]),
+      builder: (context, _) {
+        if (app.bannerNotifier.value != null) {
+          return const SizedBox.shrink();
+        }
+
+        final clips = MistakeAudioService.instance.clips;
+        final bool showMistakePill =
+            !widget.isRecording && clips.isNotEmpty;
+        final bool showMaglisPill = maglis.inSession;
+        final bool showScreenRecPill = sr.isRecordingNotifier.value;
+        final SavedScreenRecording? completedRec =
+            !showScreenRecPill ? sr.latestCompletedNotifier.value : null;
+
+        if (!showMistakePill &&
+            !showMaglisPill &&
+            !showScreenRecPill &&
+            completedRec == null) {
+          return const SizedBox.shrink();
+        }
+
+        final bool isDark = app.isDarkMode;
+        final bool isId = app.isIndonesian;
+        final bool isAr = app.isArabic;
+
+        final Color pillBg =
+            isDark ? const Color(0xF2121923) : const Color(0xFCFFFFFF);
+        final List<BoxShadow> pillShadow = [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ];
+
+        Widget? mistakeWidget;
+        if (showMistakePill) {
+          final Color rose =
+              isDark ? const Color(0xFFFB7185) : const Color(0xFFE11D48);
+          final int count = clips.length;
+          final String label = showMaglisPill
+              ? (isId ? '$count Koreksi' : '$count Clips')
+              : (isId
+                  ? '$count Rekaman Salah • Bandingkan'
+                  : (isAr
+                      ? '${QuranTypography.toArabicDigits(count)} خطأ • مقارنة'
+                      : '$count Mistakes • Compare'));
+
+          mistakeWidget = Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () {
+                DialogService.showMistakeCompare(
+                  context,
+                  clip: clips.last,
+                );
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: pillBg,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: rose.withValues(alpha: isDark ? 0.45 : 0.32),
+                    width: 1.0,
+                  ),
+                  boxShadow: pillShadow,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.compare_arrows_rounded,
+                      size: 14.5,
+                      color: rose,
+                    ),
+                    const SizedBox(width: 5.5),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color:
+                            isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget? maglisWidget;
+        if (showMaglisPill) {
+          final String rawCode = maglis.roomCode;
+          final String userName = app.maglisUserName.trim();
+          final String primaryText =
+              userName.isNotEmpty ? userName : (rawCode.isEmpty ? '----' : rawCode);
+          final int peerCount =
+              maglis.participantCount > 0 ? maglis.participantCount : 1;
+          final bool activeRecite =
+              maglis.isRemoteReciting || widget.isRecording;
+          final Color emerald =
+              isDark ? const Color(0xFF10B981) : const Color(0xFF059669);
+          final Color nameColor = userName.isNotEmpty
+              ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+              : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
+
+          maglisWidget = Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () {
+                if (rawCode.isNotEmpty) {
+                  Clipboard.setData(ClipboardData(text: rawCode));
+                  app.showBanner(
+                    AppBannerInfo(
+                      id: 'maglis_code_copied',
+                      messageAr: 'تم نسخ رمز المجلس: $rawCode',
+                      messageEn: 'Majlis code copied: $rawCode',
+                      messageId: 'Kode Majlis disalin: $rawCode',
+                      icon: Icons.copy_rounded,
+                      customDuration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: pillBg,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: activeRecite
+                        ? emerald.withValues(alpha: isDark ? 0.55 : 0.38)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.14)
+                            : const Color(0xFFCBD5E1).withValues(alpha: 0.85)),
+                    width: 1.0,
+                  ),
+                  boxShadow: pillShadow,
+                ),
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Halo live status dot
+                      Container(
+                        width: 13,
+                        height: 13,
+                        decoration: BoxDecoration(
+                          color: emerald.withValues(alpha: isDark ? 0.22 : 0.16),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Container(
+                          width: 6.5,
+                          height: 6.5,
+                          decoration: BoxDecoration(
+                            color: emerald,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6.5),
+                      Text(
+                        primaryText,
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          color: nameColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.2,
+                          letterSpacing: userName.isNotEmpty ? 0.4 : 0.6,
+                          height: 1.1,
+                        ),
+                      ),
+                      if (maglis.isHost) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF059669), Color(0xFF0D9488)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'USTADZ',
+                            style: TextStyle(
+                              fontSize: 8.2,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                      Container(
+                        width: 1,
+                        height: 12,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.16)
+                            : const Color(0xFFCBD5E1),
+                      ),
+                      Icon(
+                        Icons.people_alt_rounded,
+                        size: 13.5,
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$peerCount',
+                        style: TextStyle(
+                          color: isDark
+                              ? const Color(0xFFE2E8F0)
+                              : const Color(0xFF1E293B),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget? screenRecWidget;
+        if (showScreenRecPill) {
+          final int secs = sr.elapsedSecondsNotifier.value;
+          final String timeStr =
+              SavedScreenRecording.formatDuration(secs * 1000);
+          screenRecWidget = Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () => unawaited(_toggleScreenRecording()),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE11D48),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE11D48).withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'REC $timeStr',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.stop_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else if (completedRec != null) {
+          final Color emerald =
+              isDark ? const Color(0xFF10B981) : const Color(0xFF059669);
+          screenRecWidget = Container(
+            padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+            decoration: BoxDecoration(
+              color: pillBg,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: emerald.withValues(alpha: isDark ? 0.50 : 0.35),
+                width: 1.0,
+              ),
+              boxShadow: pillShadow,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    sr.clearLatestCompleted();
+                    DialogService.showRecordingPreview(
+                      context,
+                      recording: completedRec,
+                    );
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.play_circle_filled_rounded,
+                        size: 16,
+                        color: emerald,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isId
+                            ? 'Video Tersimpan • Putar/Share'
+                            : 'Saved • Play/Share',
+                        style: TextStyle(
+                          color: isDark
+                              ? const Color(0xFFF8FAFC)
+                              : const Color(0xFF0F172A),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => sr.shareRecording(completedRec),
+                  child: Icon(
+                    Icons.share_rounded,
+                    size: 14.5,
+                    color: emerald,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => sr.clearLatestCompleted(),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 15,
+                    color: isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final List<Widget> pills = [
+          if (screenRecWidget != null) screenRecWidget,
+          if (maglisWidget != null) maglisWidget,
+          if (mistakeWidget != null) mistakeWidget,
+        ];
+
+        return Positioned(
+          bottom: bottom + 68,
+          left: pageLabelLeft + 36,
+          right: safeRight + 52,
+          child: Align(
+            alignment: Alignment.center,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < pills.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    pills[i],
+                  ],
+                ],
+              ),
             ),
           ),
         );

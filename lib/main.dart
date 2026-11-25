@@ -44,9 +44,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'audio/camcorder_sound_helper.dart';
+import 'audio/mistake_audio_service.dart';
 import 'audio/quran_audio_handler.dart';
 import 'audio/quran_audio_service.dart';
 import 'audio/quran_download_service.dart';
+import 'audio/screen_recording_service.dart';
 import 'ui/widgets/dialogs/dialog_service.dart';
 import 'ui/widgets/intro_bismillah_page.dart';
 
@@ -91,6 +93,7 @@ void main() async {
       }
 
       unawaited(QuranDownloadService.instance.init());
+      unawaited(ScreenRecordingService.instance.init());
 
       if (kReleaseMode) {
         debugPrint = (String? message, {int? wrapWidth}) {
@@ -316,6 +319,10 @@ class _OrchestratorState extends State<_Orchestrator>
 
   void _syncMaglisBroadcastListeners() {
     final inSession = MaglisController.instance.inSession;
+    unawaited(ScreenRecordingService.instance.setExternalMicActive(
+      _isRecording || _isVoiceSearching,
+      inMaglis: inSession,
+    ));
     if (inSession && !_hasAttachedMaglisBroadcast && _ctrl != null) {
       _hasAttachedMaglisBroadcast = true;
       _ctrl!.addListener(_throttledBroadcastMaglisProgress);
@@ -401,6 +408,8 @@ class _OrchestratorState extends State<_Orchestrator>
       );
     };
     QuranAudioService.instance.onPlayingChanged = _onVerseAudioPlayingChanged;
+    MistakeAudioService.instance.isPlayingNotifier
+        .addListener(_onMistakePlaybackChanged);
     MaglisController.instance.sessionListenable
         .addListener(_onMaglisSessionChangedForIdleTimer);
     MaglisController.instance.sessionListenable
@@ -651,6 +660,9 @@ class _OrchestratorState extends State<_Orchestrator>
     QuranAudioService.instance.onAudioProgress = null;
     QuranAudioService.instance.onPlayingChanged = null;
     QuranAudioService.instance.stop();
+    MistakeAudioService.instance.isPlayingNotifier
+        .removeListener(_onMistakePlaybackChanged);
+    MistakeAudioService.instance.stopPlayback();
     _transcriptionSub?.cancel();
     _audio.dispose();
     _ctrl?.dispose();
@@ -879,15 +891,29 @@ class _OrchestratorState extends State<_Orchestrator>
 
   Future<void> _startAudioRecordingStream() async {
     try {
+      await ScreenRecordingService.instance.setExternalMicActive(
+        true,
+        inMaglis: MaglisController.instance.inSession,
+      );
       await _audio.start(
         onChunk: (chunk, isFinal) {
-          // Software mute: drop mic frames while verse audio is playing or recording is inactive
+          // Software mute: drop mic frames while verse/comparison audio is playing or recording is inactive
           // so the AI model never hears the phone speaker or accepts input!
-          if (QuranAudioService.instance.isPlaying || !_isRecording) return;
+          if (QuranAudioService.instance.isPlaying ||
+              MistakeAudioService.instance.isPlaying ||
+              !_isRecording) {
+            return;
+          }
+          ScreenRecordingService.instance.appendFloat32MicChunk(chunk);
+          MistakeAudioService.instance.appendFloat32Chunk(chunk);
           _ctrl?.feed(chunk, isFinal: isFinal);
         },
       );
     } catch (e) {
+      unawaited(ScreenRecordingService.instance.setExternalMicActive(
+        false,
+        inMaglis: MaglisController.instance.inSession,
+      ));
       DebugLogger.logSimple('AUDIO', '❌ ERROR: $e');
       if (mounted) {
         setState(() => _isRecording = false);
@@ -910,11 +936,28 @@ class _OrchestratorState extends State<_Orchestrator>
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _audio.stop().catchError((_) {});
         }
-      } else {
+      } else if (!MistakeAudioService.instance.isPlaying) {
         // Verse audio has stopped:
         _audio.clearBuffer();
         _engine.resetBuffer();
         // On Android, seamlessly re-open the mic stream so recitation works immediately!
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          _startAudioRecordingStream();
+        }
+      }
+    }
+  }
+
+  void _onMistakePlaybackChanged() {
+    final bool isPlayingMistake = MistakeAudioService.instance.isPlaying;
+    if (_isRecording) {
+      if (isPlayingMistake) {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          _audio.stop().catchError((_) {});
+        }
+      } else if (!QuranAudioService.instance.isPlaying) {
+        _audio.clearBuffer();
+        _engine.resetBuffer();
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _startAudioRecordingStream();
         }
@@ -930,7 +973,12 @@ class _OrchestratorState extends State<_Orchestrator>
     try {
       if (_isRecording) {
         _maglisBroadcastThrottle?.cancel();
+        MistakeAudioService.instance.flushPendingAndResetRing();
         await _audio.stop();
+        unawaited(ScreenRecordingService.instance.setExternalMicActive(
+          false,
+          inMaglis: MaglisController.instance.inSession,
+        ));
         _engine.resetBuffer();
         _ctrl?.finalize();
         if (MaglisController.instance.inSession) {
@@ -1063,6 +1111,7 @@ class _OrchestratorState extends State<_Orchestrator>
           }
           if (mounted) setState(() => _isRecording = true);
           _broadcastMaglisProgress();
+          MistakeAudioService.instance.resetRingBuffer();
           await _startAudioRecordingStream();
         }
       }
@@ -1090,7 +1139,12 @@ class _OrchestratorState extends State<_Orchestrator>
     _isRecording = false;
     _isToggling = false;
     _maglisBroadcastThrottle?.cancel();
+    MistakeAudioService.instance.flushPendingAndResetRing();
     _audio.stop();
+    unawaited(ScreenRecordingService.instance.setExternalMicActive(
+      false,
+      inMaglis: MaglisController.instance.inSession,
+    ));
     _engine.resetBuffer();
     _ctrl?.finalize();
     // Screen remains awake continuously
@@ -1258,14 +1312,23 @@ class _OrchestratorState extends State<_Orchestrator>
       await _voiceSearchCtrl.startSearch();
 
       _isVoiceSearchPaused = false;
+      await ScreenRecordingService.instance.setExternalMicActive(
+        true,
+        inMaglis: MaglisController.instance.inSession,
+      );
       await _audio.start(
         onChunk: (chunk, isFinal) {
           if (!_isVoiceSearchPaused) {
+            ScreenRecordingService.instance.appendFloat32MicChunk(chunk);
             _engine.transcribe(chunk, isFinal: isFinal);
           }
         },
       );
     } catch (e) {
+      unawaited(ScreenRecordingService.instance.setExternalMicActive(
+        false,
+        inMaglis: MaglisController.instance.inSession,
+      ));
       DebugLogger.logSimple('VOICE_SEARCH', '❌ START ERROR: $e');
       if (mounted) setState(() => _isVoiceSearching = false);
     } finally {
@@ -1280,6 +1343,10 @@ class _OrchestratorState extends State<_Orchestrator>
 
     try {
       await _audio.stop();
+      unawaited(ScreenRecordingService.instance.setExternalMicActive(
+        false,
+        inMaglis: MaglisController.instance.inSession,
+      ));
       _engine.resetBuffer();
       // Screen remains awake continuously
 

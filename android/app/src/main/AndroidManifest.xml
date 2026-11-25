@@ -4,11 +4,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- TODO(playstore-fgs): Temporarily disabled until foreground service declarations & videos are submitted.
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- TODO(playstore-fgs): Temporarily disabled until foreground service declarations & videos are submitted.
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     -->
 
     <!-- Mark hardware features as optional so Google Play does not drop devices without Bluetooth or Camera -->
@@ -72,6 +73,21 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <service
+            android:name=".ScreenRecordService"
+            android:foregroundServiceType="mediaProjection"
+            android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.ngabar.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/ngabar_file_paths" />
+        </provider>
+
         <!-- TODO(playstore-fgs): Temporarily disabled until foreground service declarations & videos are submitted.
         <service android:name=".MaglisCallService"
             android:foregroundServiceType="microphone"
@@ -101,6 +117,12 @@
     <queries>
         <!-- Required to check for Play Store existence to safely bypass InAppUpdate -->
         <package android:name="com.android.vending" />
+        <!-- Social platforms for direct video sharing -->
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.zhiliaoapp.musically" />
+        <package android:name="com.ss.android.ugc.trill" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.facebook.lite" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
