@@ -784,11 +784,14 @@ class BottomActionBar extends StatelessWidget {
     final String countDisplay =
         formatMaglisCode(count.toString(), isArabic: isAr);
     final Color fgColor = _btnFg(isDark);
-    final String userName = AppState.instance.maglisUserName;
+    final String userName = AppState.instance.maglisUserName.trim();
+    // Prioritaskan nama profil user jika sudah disetel, fallback ke kode room jika belum ada
+    final String primaryText = userName.isNotEmpty ? userName : (displayCode.isEmpty ? '----' : displayCode);
 
     return Tooltip(
-      message:
-          isAr ? 'رمز المجلس (اضغط لنسخ الرمز)' : 'Majlis Code (tap to copy)',
+      message: userName.isNotEmpty
+          ? (isAr ? 'الاسم: $userName | رمز المجلس: $rawCode (اضغط للنسخ)' : 'Name: $userName | Code: $rawCode (tap to copy)')
+          : (isAr ? 'رمز المجلس (اضغط لنسخ الرمز)' : 'Majlis Code (tap to copy)'),
       waitDuration: const Duration(milliseconds: 350),
       child: _TapScale(
         onTap: () {
@@ -800,6 +803,7 @@ class BottomActionBar extends StatelessWidget {
                 messageAr:
                     'تم نسخ رمز المجلس: \u202A${formatMaglisCode(rawCode, isArabic: true)}\u202C',
                 messageEn: 'Majlis code copied: $rawCode',
+                messageId: 'Kode Majlis disalin: $rawCode',
                 icon: Icons.copy_rounded,
                 customDuration: const Duration(seconds: 2),
               ),
@@ -829,53 +833,17 @@ class BottomActionBar extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        displayCode.isEmpty ? '----' : displayCode,
+                        primaryText,
                         maxLines: 1,
                         style: TextStyle(
                           fontFamily: 'cairo',
-                          color: fgColor,
-                          fontWeight: FontWeight.w800,
+                          color: userName.isNotEmpty ? const Color(0xFF10B981) : fgColor,
+                          fontWeight: FontWeight.w900,
                           fontSize: isNarrow ? 13.5 : 14.5,
-                          letterSpacing: 1.1,
+                          letterSpacing: 1.0,
                           height: 1.05,
                         ),
                       ),
-                      if (userName.isNotEmpty) ...[
-                        Container(
-                          width: 1.0,
-                          height: 14.0,
-                          margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.14)
-                              : Colors.black.withValues(alpha: 0.12),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4.5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981)
-                                .withValues(alpha: isDark ? 0.20 : 0.12),
-                            borderRadius: BorderRadius.circular(4.0),
-                            border: Border.all(
-                              color: const Color(0xFF10B981)
-                                  .withValues(alpha: isDark ? 0.40 : 0.25),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Text(
-                            userName,
-                            maxLines: 1,
-                            style: const TextStyle(
-                              fontFamily: 'cairo',
-                              color: Color(0xFF10B981),
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11.5,
-                              letterSpacing: 0.8,
-                              height: 1.05,
-                            ),
-                          ),
-                        ),
-                      ],
                       Container(
                         width: 1.0,
                         height: 14.0,
