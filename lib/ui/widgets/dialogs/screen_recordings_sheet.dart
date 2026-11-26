@@ -6,6 +6,7 @@ import '../../../audio/screen_recording_service.dart';
 import '../../../core/app_state.dart';
 import '../../../core/platform_utils.dart';
 import 'dialog_base.dart';
+import 'live_stream_sheet.dart';
 
 enum _RecordingFilter { all, reciter, maglis }
 
@@ -230,6 +231,54 @@ class _ScreenRecordingsSheetState extends State<ScreenRecordingsSheet> {
             ),
           ),
           actions: [
+            if (PlatformCapabilities.isAndroid) ...[
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).pop();
+                  LiveStreamSheet.show(context);
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: sr.isLiveStreamingNotifier.value
+                        ? const Color(0xFFE11D48)
+                        : const Color(0xFF2563EB)
+                            .withValues(alpha: isDark ? 0.22 : 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: sr.isLiveStreamingNotifier.value
+                          ? const Color(0xFFE11D48)
+                          : const Color(0xFF2563EB).withValues(alpha: 0.42),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.sensors_rounded,
+                        size: 13,
+                        color: sr.isLiveStreamingNotifier.value
+                            ? Colors.white
+                            : const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Live',
+                        style: TextStyle(
+                          color: sr.isLiveStreamingNotifier.value
+                              ? Colors.white
+                              : const Color(0xFF2563EB),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             if (widget.onStartRecordTap != null)
               GestureDetector(
                 onTap: () {

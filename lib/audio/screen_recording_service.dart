@@ -8,11 +8,24 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_state.dart';
 import '../core/platform_utils.dart';
 
 enum SocialSharePlatform { youtube, tiktok, facebook }
+
+enum LiveStreamPlatform { youtube, facebook, custom }
+
+enum LiveEncoderProfile {
+  /// 540p, 20fps, 1.2 Mbps video + 64 kbps AAC — preserves Sherpa-ONNX AI speed & thermals
+  aiSafeLight,
+
+  /// 720p, 24fps, 2.2 Mbps video + 96 kbps AAC — sharper for flagship devices
+  balancedHd,
+}
+
+enum LiveStreamStatus { idle, connecting, live, error }
 
 /// Metadata for a saved screen recording stored on disk.
 class SavedScreenRecording {
@@ -173,23 +186,108 @@ class ScreenRecordingService {
   final ValueNotifier<SavedScreenRecording?> latestCompletedNotifier =
       ValueNotifier<SavedScreenRecording?>(null);
 
+  // Live Streaming (RTMP / RTMPS) state
+  final ValueNotifier<bool> isLiveStreamingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<LiveStreamStatus> liveStatusNotifier =
+      ValueNotifier<LiveStreamStatus>(LiveStreamStatus.idle);
+  final ValueNotifier<int> liveBitrateKbpsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> liveDroppedFramesNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> liveElapsedSecondsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<String?> liveErrorNotifier = ValueNotifier<String?>(null);
+
+  LiveStreamPlatform livePlatform = LiveStreamPlatform.youtube;
+  LiveEncoderProfile liveEncoderProfile = LiveEncoderProfile.aiSafeLight;
+  bool liveYoutubeUseTls = true;
+  String liveCustomUrl = '';
+  String liveStreamKey = '';
+
   bool _initialized = false;
   io.Directory? _recordingsDir;
   io.File? _indexFile;
   final List<SavedScreenRecording> _recordings = [];
   _PendingRecordingMeta? _pending;
   Timer? _elapsedTimer;
+  Timer? _liveElapsedTimer;
 
   bool get isSupported => PlatformCapabilities.isAndroid;
   bool get isRecording => isRecordingNotifier.value;
+  bool get isLiveStreaming => isLiveStreamingNotifier.value;
+  bool get isAnyCaptureActive =>
+      isRecordingNotifier.value || isLiveStreamingNotifier.value;
   List<SavedScreenRecording> get recordings => List.unmodifiable(_recordings);
   int get totalBytes => totalBytesNotifier.value;
 
   Future<void> init() async {
     if (_initialized || kIsWeb) return;
     _initialized = true;
+    await _loadLiveConfig();
     await _ensureStorageReady();
     await _loadAndReconcileIndex();
+  }
+
+  Future<void> _loadLiveConfig() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pIdx = prefs.getInt('live_rtmp_platform') ?? 0;
+      livePlatform = LiveStreamPlatform
+          .values[pIdx.clamp(0, LiveStreamPlatform.values.length - 1)];
+      final eIdx = prefs.getInt('live_encoder_profile') ?? 0;
+      liveEncoderProfile = LiveEncoderProfile
+          .values[eIdx.clamp(0, LiveEncoderProfile.values.length - 1)];
+      liveYoutubeUseTls = prefs.getBool('live_yt_tls') ?? true;
+      liveCustomUrl = prefs.getString('live_custom_url') ?? '';
+      liveStreamKey = prefs.getString('live_stream_key') ?? '';
+    } catch (_) {}
+  }
+
+  Future<void> saveLiveConfig({
+    required LiveStreamPlatform platform,
+    required LiveEncoderProfile profile,
+    required bool youtubeUseTls,
+    required String customUrl,
+    required String streamKey,
+  }) async {
+    livePlatform = platform;
+    liveEncoderProfile = profile;
+    liveYoutubeUseTls = youtubeUseTls;
+    liveCustomUrl = customUrl.trim();
+    liveStreamKey = streamKey.trim();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('live_rtmp_platform', platform.index);
+      await prefs.setInt('live_encoder_profile', profile.index);
+      await prefs.setBool('live_yt_tls', youtubeUseTls);
+      await prefs.setString('live_custom_url', liveCustomUrl);
+      await prefs.setString('live_stream_key', liveStreamKey);
+    } catch (_) {}
+  }
+
+  String serverUrlFor(LiveStreamPlatform platform, {bool? youtubeTls}) {
+    final useTls = youtubeTls ?? liveYoutubeUseTls;
+    return switch (platform) {
+      LiveStreamPlatform.youtube => useTls
+          ? 'rtmps://a.rtmps.youtube.com/live2'
+          : 'rtmp://a.rtmp.youtube.com/live2',
+      LiveStreamPlatform.facebook =>
+        'rtmps://live-api-s.facebook.com:443/rtmp',
+      LiveStreamPlatform.custom => liveCustomUrl,
+    };
+  }
+
+  String buildFullRtmpUrl({
+    required LiveStreamPlatform platform,
+    required String customUrl,
+    required String streamKey,
+    required bool youtubeTls,
+  }) {
+    final base = (platform == LiveStreamPlatform.custom
+            ? customUrl.trim()
+            : serverUrlFor(platform, youtubeTls: youtubeTls))
+        .replaceAll(RegExp(r'/+$'), '');
+    final key = streamKey.trim().replaceAll(RegExp(r'^/+'), '');
+    if (base.isEmpty) return '';
+    if (key.isEmpty) return base;
+    return '$base/$key';
   }
 
   Future<io.Directory> _ensureStorageReady() async {
@@ -330,6 +428,47 @@ class ScreenRecordingService {
           _pending = null;
         }
       }
+    } else if (call.method == 'onLiveStateChanged') {
+      final args = call.arguments as Map?;
+      final String status = (args?['status'] ?? 'stopped').toString();
+      final int kbps = (args?['bitrateKbps'] as num?)?.toInt() ?? 0;
+      final int dropped = (args?['droppedFrames'] as num?)?.toInt() ?? 0;
+      final String? error = args?['error'] as String?;
+
+      liveBitrateKbpsNotifier.value = kbps;
+      liveDroppedFramesNotifier.value = dropped;
+
+      if (status == 'connecting') {
+        isStartingNotifier.value = false;
+        isLiveStreamingNotifier.value = true;
+        liveStatusNotifier.value = LiveStreamStatus.connecting;
+        liveErrorNotifier.value = null;
+      } else if (status == 'live') {
+        isStartingNotifier.value = false;
+        isLiveStreamingNotifier.value = true;
+        if (liveStatusNotifier.value != LiveStreamStatus.live) {
+          _startLiveElapsedTicker();
+        }
+        liveStatusNotifier.value = LiveStreamStatus.live;
+        liveErrorNotifier.value = null;
+      } else if (status == 'error') {
+        _stopLiveElapsedTicker();
+        isStartingNotifier.value = false;
+        isLiveStreamingNotifier.value = false;
+        liveStatusNotifier.value = LiveStreamStatus.error;
+        liveErrorNotifier.value = error;
+        liveElapsedSecondsNotifier.value = 0;
+        if (error != null && error.isNotEmpty) {
+          _showLiveErrorBanner(error);
+        }
+      } else {
+        _stopLiveElapsedTicker();
+        isStartingNotifier.value = false;
+        isLiveStreamingNotifier.value = false;
+        liveStatusNotifier.value = LiveStreamStatus.idle;
+        liveBitrateKbpsNotifier.value = 0;
+        liveElapsedSecondsNotifier.value = 0;
+      }
     }
     return null;
   }
@@ -345,6 +484,19 @@ class ScreenRecordingService {
   void _stopElapsedTicker() {
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
+  }
+
+  void _startLiveElapsedTicker() {
+    _liveElapsedTimer?.cancel();
+    liveElapsedSecondsNotifier.value = 0;
+    _liveElapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      liveElapsedSecondsNotifier.value = liveElapsedSecondsNotifier.value + 1;
+    });
+  }
+
+  void _stopLiveElapsedTicker() {
+    _liveElapsedTimer?.cancel();
+    _liveElapsedTimer = null;
   }
 
   Future<void> _finalizeCompletedRecording(
@@ -413,7 +565,7 @@ class ScreenRecordingService {
       ));
       return false;
     }
-    if (isRecordingNotifier.value || isStartingNotifier.value) {
+    if (isAnyCaptureActive || isStartingNotifier.value) {
       return false;
     }
 
@@ -488,11 +640,138 @@ class ScreenRecordingService {
     }
   }
 
+  Future<bool> startLiveStream({
+    required LiveStreamPlatform platform,
+    required LiveEncoderProfile encoderProfile,
+    required bool youtubeUseTls,
+    required String customUrl,
+    required String streamKey,
+    required bool isMaglis,
+    required bool isExternalMicActive,
+  }) async {
+    if (!isSupported) {
+      AppState.instance.showBanner(AppBannerInfo(
+        id: 'live_stream_unsupported',
+        messageAr: 'البث المباشر متاح حالياً على أجهزة أندرويد فقط',
+        messageEn: 'Live streaming is currently supported on Android devices',
+        messageId: 'Live Streaming saat ini tersedia untuk perangkat Android',
+        icon: Icons.sensors_off_rounded,
+        isWarning: true,
+      ));
+      return false;
+    }
+    if (isAnyCaptureActive || isStartingNotifier.value) {
+      AppState.instance.showBanner(AppBannerInfo(
+        id: 'live_stream_busy',
+        messageAr: 'يوجد تسجيل أو بث نشط حالياً',
+        messageEn: 'Another recording or stream is currently active',
+        messageId: 'Hentikan rekaman atau live yang sedang berjalan terlebih dahulu',
+        icon: Icons.warning_amber_rounded,
+        isWarning: true,
+      ));
+      return false;
+    }
+
+    await init();
+    await saveLiveConfig(
+      platform: platform,
+      profile: encoderProfile,
+      youtubeUseTls: youtubeUseTls,
+      customUrl: customUrl,
+      streamKey: streamKey,
+    );
+
+    final fullUrl = buildFullRtmpUrl(
+      platform: platform,
+      customUrl: customUrl,
+      streamKey: streamKey,
+      youtubeTls: youtubeUseTls,
+    );
+    if (fullUrl.isEmpty ||
+        (!fullUrl.startsWith('rtmp://') && !fullUrl.startsWith('rtmps://'))) {
+      _showLiveErrorBanner(
+        AppState.instance.isIndonesian
+            ? 'Masukkan URL RTMP & Stream Key yang valid'
+            : 'Please enter a valid RTMP URL and Stream Key',
+      );
+      return false;
+    }
+
+    isStartingNotifier.value = true;
+    liveErrorNotifier.value = null;
+
+    try {
+      try {
+        final notifStatus = await Permission.notification.status;
+        if (notifStatus.isDenied) {
+          await Permission.notification.request();
+        }
+      } catch (_) {}
+
+      final bool? started = await _channel.invokeMethod<bool>(
+        'startLiveStream',
+        {
+          'rtmpUrl': fullUrl,
+          'encoderProfile':
+              encoderProfile == LiveEncoderProfile.aiSafeLight ? 'light' : 'hd',
+          'captureMic': true,
+          'inMaglis': isMaglis,
+          'externalMicActive': isExternalMicActive,
+        },
+      );
+
+      if (started != true) {
+        isStartingNotifier.value = false;
+        return false;
+      }
+      return true;
+    } catch (e) {
+      isStartingNotifier.value = false;
+      _showLiveErrorBanner(e.toString());
+      return false;
+    }
+  }
+
+  Future<void> stopLiveStream() async {
+    if (!isSupported || !isLiveStreamingNotifier.value) return;
+    try {
+      await _channel.invokeMethod<bool>('stopLiveStream');
+    } catch (e) {
+      debugPrint('[ScreenRecordingService] Stop live error: $e');
+    }
+  }
+
+  Future<void> copyLiveStreamMeta({
+    required bool isMaglis,
+    required int surah,
+    required String surahName,
+    required int ayah,
+    String? maglisRoomCode,
+  }) async {
+    final cleanSurah =
+        surahName.trim().isNotEmpty ? surahName.trim() : 'Surah $surah';
+    final isId = AppState.instance.isIndonesian;
+    final text = isId
+        ? (isMaglis
+            ? 'Live Majlis Ngaji${(maglisRoomCode != null && maglisRoomCode.isNotEmpty) ? ' ($maglisRoomCode)' : ''} — QS. $cleanSurah Ayat $ayah | ngabar'
+            : 'Live Tilawah Al-Qur\'an — QS. $cleanSurah Ayat $ayah | ngabar')
+        : 'Live Quran Recitation — Surah $cleanSurah, Ayah $ayah | ngabar';
+    await Clipboard.setData(ClipboardData(text: text));
+    AppState.instance.showBanner(AppBannerInfo(
+      id: 'live_meta_copied',
+      messageAr: 'تم نسخ عنوان البث للحافظة',
+      messageEn: 'Stream title copied to clipboard',
+      messageId: 'Judul siaran disalin ke clipboard',
+      icon: Icons.copy_rounded,
+      customDuration: const Duration(seconds: 2),
+    ));
+  }
+
   Future<void> setExternalMicActive(
     bool active, {
     required bool inMaglis,
   }) async {
-    if (!isSupported || !isRecordingNotifier.value) return;
+    if (!isSupported || !isAnyCaptureActive) return;
     try {
       await _channel.invokeMethod<bool>(
         'setAudioContext',
@@ -505,10 +784,10 @@ class ScreenRecordingService {
   }
 
   /// Passively copies the 16kHz Float32 PCM stream from [AppAudioProcessor]
-  /// into the native screen recorder audio mixer. Does nothing when screen recording
-  /// is inactive, adding zero overhead to Sherpa-ONNX AI word recognition.
+  /// into the native screen recorder / live streamer audio mixer. Does nothing when
+  /// inactive, adding zero overhead to Sherpa-ONNX AI word recognition.
   void appendFloat32MicChunk(Float32List chunk) {
-    if (!isRecordingNotifier.value || !isSupported || chunk.isEmpty) return;
+    if (!isAnyCaptureActive || !isSupported || chunk.isEmpty) return;
 
     final int len = chunk.length;
     final Int16List pcm16 = Int16List(len);
@@ -734,6 +1013,18 @@ class ScreenRecordingService {
       messageEn: 'Screen recording error: $err',
       messageId: 'Gagal merekam layar: $err',
       icon: Icons.videocam_off_rounded,
+      isWarning: true,
+    ));
+  }
+
+  void _showLiveErrorBanner(String err) {
+    final app = AppState.instance;
+    app.showBanner(AppBannerInfo(
+      id: 'live_stream_error',
+      messageAr: 'تعذر البث المباشر: $err',
+      messageEn: 'Live stream error: $err',
+      messageId: 'Live Streaming gagal: $err',
+      icon: Icons.sensors_off_rounded,
       isWarning: true,
     ));
   }

@@ -66,6 +66,8 @@ flutter:
     - assets/qris.jpg
     - assets/pages.tar.xz
     - assets/audio_timings/husary/
+    - assets/iqro/iqro_data.json
+    - assets/iqro/audio/
 
 
   fonts:

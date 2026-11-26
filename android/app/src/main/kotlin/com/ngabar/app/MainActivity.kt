@@ -50,6 +50,8 @@ class MainActivity : FlutterActivity() {
     private var screenRecordChannel: MethodChannel? = null
     private var pendingScreenRecordResult: MethodChannel.Result? = null
     private var pendingOutputPath: String = ""
+    private var pendingRtmpUrl: String = ""
+    private var pendingEncoderProfile: String = "recording"
     private var pendingCaptureMic: Boolean = true
     private var pendingInMaglis: Boolean = false
     private var pendingExternalMicActive: Boolean = false
@@ -199,6 +201,17 @@ class MainActivity : FlutterActivity() {
                 )
             )
         }
+        ScreenRecordService.onLiveStateChanged = { status, bitrateKbps, droppedFrames, error ->
+            srChannel.invokeMethod(
+                "onLiveStateChanged",
+                mapOf(
+                    "status" to status,
+                    "bitrateKbps" to bitrateKbps,
+                    "droppedFrames" to droppedFrames,
+                    "error" to error
+                )
+            )
+        }
 
         srChannel.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -217,6 +230,8 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     pendingOutputPath = path
+                    pendingRtmpUrl = ""
+                    pendingEncoderProfile = "recording"
                     pendingCaptureMic = call.argument<Boolean>("captureMic") ?: true
                     pendingInMaglis = call.argument<Boolean>("inMaglis") ?: false
                     pendingExternalMicActive = call.argument<Boolean>("externalMicActive") ?: false
@@ -226,7 +241,33 @@ class MainActivity : FlutterActivity() {
                     @Suppress("DEPRECATION")
                     startActivityForResult(mpm.createScreenCaptureIntent(), REQ_SCREEN_RECORD)
                 }
-                "stopScreenRecord" -> {
+                "startLiveStream" -> {
+                    if (ScreenRecordService.isCurrentlyRecording) {
+                        result.error("BUSY", "Sedang merekam atau live streaming", null)
+                        return@setMethodCallHandler
+                    }
+                    if (pendingScreenRecordResult != null) {
+                        result.error("BUSY", "Screen capture prompt already open", null)
+                        return@setMethodCallHandler
+                    }
+                    val rtmpUrl = call.argument<String>("rtmpUrl") ?: ""
+                    if (rtmpUrl.isEmpty()) {
+                        result.error("INVALID_ARGS", "rtmpUrl is required", null)
+                        return@setMethodCallHandler
+                    }
+                    pendingOutputPath = ""
+                    pendingRtmpUrl = rtmpUrl
+                    pendingEncoderProfile = call.argument<String>("encoderProfile") ?: "light"
+                    pendingCaptureMic = call.argument<Boolean>("captureMic") ?: true
+                    pendingInMaglis = call.argument<Boolean>("inMaglis") ?: false
+                    pendingExternalMicActive = call.argument<Boolean>("externalMicActive") ?: false
+                    pendingScreenRecordResult = result
+
+                    val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(mpm.createScreenCaptureIntent(), REQ_SCREEN_RECORD)
+                }
+                "stopScreenRecord", "stopLiveStream" -> {
                     if (!ScreenRecordService.isCurrentlyRecording) {
                         result.success(true)
                         return@setMethodCallHandler
@@ -308,13 +349,15 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            val (recW, recH, dpi) = computeRecordingDimensions()
+            val (recW, recH, dpi) = computeRecordingDimensions(pendingEncoderProfile)
             ScreenRecordService.pendingResultCode = resultCode
             ScreenRecordService.pendingResultData = data
 
             val serviceIntent = Intent(this, ScreenRecordService::class.java).apply {
                 action = ScreenRecordService.ACTION_START
                 putExtra(ScreenRecordService.EXTRA_OUTPUT_PATH, pendingOutputPath)
+                putExtra(ScreenRecordService.EXTRA_RTMP_URL, pendingRtmpUrl)
+                putExtra(ScreenRecordService.EXTRA_ENCODER_PROFILE, pendingEncoderProfile)
                 putExtra(ScreenRecordService.EXTRA_WIDTH, recW)
                 putExtra(ScreenRecordService.EXTRA_HEIGHT, recH)
                 putExtra(ScreenRecordService.EXTRA_DPI, dpi)
@@ -330,7 +373,7 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
-    private fun computeRecordingDimensions(): Triple<Int, Int, Int> {
+    private fun computeRecordingDimensions(encoderProfile: String): Triple<Int, Int, Int> {
         val rawW: Int
         val rawH: Int
         val dpi: Int
@@ -349,11 +392,14 @@ class MainActivity : FlutterActivity() {
             dpi = dm.densityDpi
         }
 
+        val isLight = encoderProfile == "light"
+        val maxLimit = if (isLight) 960.0 else 1280.0
         val maxSide = max(rawW, rawH).toDouble()
-        val scale = if (maxSide > 1280.0) 1280.0 / maxSide else 1.0
+        val scale = if (maxSide > maxLimit) maxLimit / maxSide else 1.0
         val targetW = max(320, ((rawW * scale) / 16.0).roundToInt() * 16)
         val targetH = max(320, ((rawH * scale) / 16.0).roundToInt() * 16)
-        return Triple(targetW, targetH, min(dpi, 480))
+        val maxDpi = if (isLight) 320 else 480
+        return Triple(targetW, targetH, min(dpi, maxDpi))
     }
 
     private fun saveVideoFileToGallery(srcPath: String, displayName: String): Boolean {

@@ -47,6 +47,8 @@ class ScreenRecordService : Service() {
         const val ACTION_STOP = "com.ngabar.app.SCREEN_RECORD_STOP"
 
         const val EXTRA_OUTPUT_PATH = "output_path"
+        const val EXTRA_RTMP_URL = "rtmp_url"
+        const val EXTRA_ENCODER_PROFILE = "encoder_profile"
         const val EXTRA_WIDTH = "width"
         const val EXTRA_HEIGHT = "height"
         const val EXTRA_DPI = "dpi"
@@ -59,7 +61,8 @@ class ScreenRecordService : Service() {
 
         private const val AUDIO_SAMPLE_RATE = 44100
         private const val AUDIO_CHANNEL_COUNT = 1
-        private const val AUDIO_BIT_RATE = 96_000
+        private const val AUDIO_BIT_RATE_RECORD = 96_000
+        private const val AUDIO_BIT_RATE_LIGHT = 64_000
         private const val AUDIO_SAMPLES_PER_FRAME = 1024
         private const val RING_CAPACITY = AUDIO_SAMPLE_RATE * 3 // ~3 seconds buffer
 
@@ -77,7 +80,14 @@ class ScreenRecordService : Service() {
             private set
 
         @Volatile
+        var isCurrentlyLiveStreaming: Boolean = false
+            private set
+
+        @Volatile
         var onStateChanged: ((isRecording: Boolean, filePath: String?, durationMs: Long, error: String?) -> Unit)? = null
+
+        @Volatile
+        var onLiveStateChanged: ((status: String, bitrateKbps: Int, droppedFrames: Int, error: String?) -> Unit)? = null
 
         fun appendExternalMicPcm16(pcm16LeBytes: ByteArray) {
             activeInstance?.enqueueExternalMicBytes(pcm16LeBytes)
@@ -98,10 +108,20 @@ class ScreenRecordService : Service() {
     private var videoCodec: MediaCodec? = null
     private var audioCodec: MediaCodec? = null
     private var muxer: MediaMuxer? = null
+    private var rtmpStreamer: RtmpLiveStreamer? = null
 
     private var outputPath: String = ""
+    private var rtmpUrl: String = ""
+    private var encoderProfile: String = "recording"
+    private var isLiveMode: Boolean = false
     private var startMonoUs: Long = 0L
     private var startWallMs: Long = 0L
+
+    @Volatile
+    private var lastLiveBitrateKbps: Int = 0
+
+    @Volatile
+    private var lastLiveDroppedFrames: Int = 0
 
     private val muxerLock = Any()
     private var videoTrackIndex = -1
@@ -172,6 +192,9 @@ class ScreenRecordService : Service() {
                 }
 
                 outputPath = intent.getStringExtra(EXTRA_OUTPUT_PATH) ?: ""
+                rtmpUrl = intent.getStringExtra(EXTRA_RTMP_URL) ?: ""
+                encoderProfile = intent.getStringExtra(EXTRA_ENCODER_PROFILE) ?: "recording"
+                isLiveMode = rtmpUrl.isNotEmpty()
                 val width = intent.getIntExtra(EXTRA_WIDTH, 720)
                 val height = intent.getIntExtra(EXTRA_HEIGHT, 1280)
                 val dpi = intent.getIntExtra(EXTRA_DPI, 320)
@@ -179,7 +202,7 @@ class ScreenRecordService : Service() {
                 inMaglis = intent.getBooleanExtra(EXTRA_IN_MAGLIS, false)
                 externalMicActive = intent.getBooleanExtra(EXTRA_EXTERNAL_MIC_ACTIVE, false)
 
-                if (outputPath.isEmpty()) {
+                if (!isLiveMode && outputPath.isEmpty()) {
                     notifyState(false, null, 0L, "Invalid output file path")
                     stopSelf()
                     return START_NOT_STICKY
@@ -233,8 +256,15 @@ class ScreenRecordService : Service() {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFE11D48.toInt())
-            .setContentTitle("ngabar — Merekam Layar")
-            .setContentText("Ketuk untuk membuka aplikasi atau Hentikan rekaman")
+            .setContentTitle(
+                if (isLiveMode) "ngabar — Sedang Live Streaming" else "ngabar — Merekam Layar"
+            )
+            .setContentText(
+                if (isLiveMode)
+                    "Siaran langsung aktif • Ketuk untuk membuka atau Stop"
+                else
+                    "Ketuk untuk membuka aplikasi atau Hentikan rekaman"
+            )
             .setContentIntent(openPending)
             .addAction(0, "Stop", stopPending)
             .setOngoing(true)
@@ -268,9 +298,11 @@ class ScreenRecordService : Service() {
         activeInstance = this
 
         try {
-            val outFile = File(outputPath)
-            outFile.parentFile?.mkdirs()
-            if (outFile.exists()) outFile.delete()
+            if (!isLiveMode) {
+                val outFile = File(outputPath)
+                outFile.parentFile?.mkdirs()
+                if (outFile.exists()) outFile.delete()
+            }
 
             val projectionManager =
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -285,7 +317,44 @@ class ScreenRecordService : Service() {
             val width = max(320, (rawWidth / 16) * 16)
             val height = max(320, (rawHeight / 16) * 16)
 
-            muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val isLightProfile = isLiveMode && encoderProfile == "light"
+            val targetFps = when {
+                isLightProfile -> 20
+                isLiveMode -> 24
+                else -> 30
+            }
+            val targetVideoBitrate = when {
+                isLightProfile -> 1_200_000
+                isLiveMode -> 2_200_000
+                else -> 3_000_000
+            }
+            val targetAudioBitrate = if (isLightProfile) AUDIO_BIT_RATE_LIGHT else AUDIO_BIT_RATE_RECORD
+
+            if (isLiveMode) {
+                muxer = null
+                lastLiveBitrateKbps = 0
+                lastLiveDroppedFrames = 0
+                rtmpStreamer = RtmpLiveStreamer(
+                    fullUrl = rtmpUrl,
+                    onState = { status, err ->
+                        notifyLiveState(status, lastLiveBitrateKbps, lastLiveDroppedFrames, err)
+                        if (status == "error" && !stopping.get()) {
+                            stopRecordingInternal(error = err ?: "RTMP stream terputus")
+                        }
+                    },
+                    onStats = { kbps, dropped ->
+                        lastLiveBitrateKbps = kbps
+                        lastLiveDroppedFrames = dropped
+                        if (!stopping.get() && isCurrentlyLiveStreaming) {
+                            notifyLiveState("live", kbps, dropped, null)
+                        }
+                    }
+                ).also { it.startAsync() }
+            } else {
+                rtmpStreamer = null
+                muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            }
+
             synchronized(muxerLock) {
                 videoTrackIndex = -1
                 audioTrackIndex = -1
@@ -297,7 +366,7 @@ class ScreenRecordService : Service() {
             }
 
             // 1. Setup Audio Encoder (AAC-LC 44.1kHz Mono)
-            audioEnabled = setupAudioEncoder()
+            audioEnabled = setupAudioEncoder(targetAudioBitrate)
 
             // 2. Setup Video Encoder (H.264 AVC)
             val videoFormat = MediaFormat.createVideoFormat(
@@ -309,13 +378,25 @@ class ScreenRecordService : Service() {
                     MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
                 )
-                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                setInteger(MediaFormat.KEY_BIT_RATE, targetVideoBitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                if (isLiveMode) {
+                    // Baseline profile guarantees no B-frames (CTS == 0) and minimal CPU/encoder load
+                    setInteger(
+                        MediaFormat.KEY_PROFILE,
+                        MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        setInteger(
+                            MediaFormat.KEY_LEVEL,
+                            MediaCodecInfo.CodecProfileLevel.AVCLevel31
+                        )
+                    }
+                }
             }
 
-            val vCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            vCodec.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val vCodec = createAndConfigureVideoCodec(videoFormat, width, height, targetVideoBitrate, targetFps)
             inputSurface = vCodec.createInputSurface()
             vCodec.start()
             videoCodec = vCodec
@@ -323,6 +404,7 @@ class ScreenRecordService : Service() {
             startMonoUs = System.nanoTime() / 1000L
             startWallMs = System.currentTimeMillis()
             isCurrentlyRecording = true
+            isCurrentlyLiveStreaming = isLiveMode
 
             // 3. Start Audio capture & mixer BEFORE VirtualDisplay so audio format is ready early
             if (audioEnabled) {
@@ -336,7 +418,7 @@ class ScreenRecordService : Service() {
 
             // 5. Create VirtualDisplay
             virtualDisplay = projection.createVirtualDisplay(
-                "NgabarScreenRecord",
+                if (isLiveMode) "NgabarLiveStream" else "NgabarScreenRecord",
                 width,
                 height,
                 dpi,
@@ -346,13 +428,55 @@ class ScreenRecordService : Service() {
                 null
             )
 
-            notifyState(true, outputPath, 0L, null)
+            if (isLiveMode) {
+                try {
+                    val params = Bundle().apply {
+                        putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+                    }
+                    vCodec.setParameters(params)
+                } catch (_: Throwable) {
+                }
+            } else {
+                notifyState(true, outputPath, 0L, null)
+            }
         } catch (e: Throwable) {
             stopRecordingInternal(error = e.message ?: "Screen recording failed to start")
         }
     }
 
-    private fun setupAudioEncoder(): Boolean {
+    private fun createAndConfigureVideoCodec(
+        preferredFormat: MediaFormat,
+        width: Int,
+        height: Int,
+        bitrate: Int,
+        fps: Int
+    ): MediaCodec {
+        val vCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        return try {
+            vCodec.configure(preferredFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            vCodec
+        } catch (_: Throwable) {
+            // Fallback without explicit profile/level if device OEM encoder rejects them
+            vCodec.reset()
+            val fallback = MediaFormat.createVideoFormat(
+                MediaFormat.MIMETYPE_VIDEO_AVC,
+                width,
+                height
+            ).apply {
+                setInteger(
+                    MediaFormat.KEY_COLOR_FORMAT,
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+                )
+                setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+            }
+            vCodec.configure(fallback, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            vCodec
+        }
+    }
+
+    private fun setupAudioEncoder(audioBitRate: Int): Boolean {
         return try {
             val format = MediaFormat.createAudioFormat(
                 MediaFormat.MIMETYPE_AUDIO_AAC,
@@ -363,7 +487,7 @@ class ScreenRecordService : Service() {
                     MediaFormat.KEY_AAC_PROFILE,
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 )
-                setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
+                setInteger(MediaFormat.KEY_BIT_RATE, audioBitRate)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
             }
             val aCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
@@ -680,11 +804,15 @@ class ScreenRecordService : Service() {
             if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 if (!endOfStream) break
             } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                synchronized(muxerLock) {
-                    if (!audioFormatReady && muxer != null) {
-                        audioTrackIndex = muxer!!.addTrack(codec.outputFormat)
-                        audioFormatReady = true
-                        maybeStartMuxerLocked()
+                if (isLiveMode) {
+                    rtmpStreamer?.onAudioFormatChanged(codec.outputFormat)
+                } else {
+                    synchronized(muxerLock) {
+                        if (!audioFormatReady && muxer != null) {
+                            audioTrackIndex = muxer!!.addTrack(codec.outputFormat)
+                            audioFormatReady = true
+                            maybeStartMuxerLocked()
+                        }
                     }
                 }
             } else if (outIdx >= 0) {
@@ -693,14 +821,20 @@ class ScreenRecordService : Service() {
                     bufferInfo.size > 0 &&
                     (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
                 ) {
-                    synchronized(muxerLock) {
-                        if (muxerStarted && audioTrackIndex >= 0 && muxer != null) {
-                            val pts = max(lastAudioPtsUs + 1L, bufferInfo.presentationTimeUs)
-                            bufferInfo.presentationTimeUs = pts
-                            lastAudioPtsUs = pts
-                            outBuf.position(bufferInfo.offset)
-                            outBuf.limit(bufferInfo.offset + bufferInfo.size)
-                            muxer!!.writeSampleData(audioTrackIndex, outBuf, bufferInfo)
+                    if (isLiveMode) {
+                        val pts = max(lastAudioPtsUs + 1L, bufferInfo.presentationTimeUs)
+                        lastAudioPtsUs = pts
+                        rtmpStreamer?.sendAudioFrame(outBuf, bufferInfo, pts)
+                    } else {
+                        synchronized(muxerLock) {
+                            if (muxerStarted && audioTrackIndex >= 0 && muxer != null) {
+                                val pts = max(lastAudioPtsUs + 1L, bufferInfo.presentationTimeUs)
+                                bufferInfo.presentationTimeUs = pts
+                                lastAudioPtsUs = pts
+                                outBuf.position(bufferInfo.offset)
+                                outBuf.limit(bufferInfo.offset + bufferInfo.size)
+                                muxer!!.writeSampleData(audioTrackIndex, outBuf, bufferInfo)
+                            }
                         }
                     }
                 }
@@ -737,28 +871,36 @@ class ScreenRecordService : Service() {
             }
 
             if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                synchronized(muxerLock) {
-                    if (!videoFormatReady && muxer != null) {
-                        videoTrackIndex = muxer!!.addTrack(codec.outputFormat)
-                        videoFormatReady = true
-                        maybeStartMuxerLocked()
+                if (isLiveMode) {
+                    rtmpStreamer?.onVideoFormatChanged(codec.outputFormat)
+                } else {
+                    synchronized(muxerLock) {
+                        if (!videoFormatReady && muxer != null) {
+                            videoTrackIndex = muxer!!.addTrack(codec.outputFormat)
+                            videoFormatReady = true
+                            maybeStartMuxerLocked()
+                        }
                     }
                 }
             } else if (outIdx >= 0) {
                 val outBuf = codec.getOutputBuffer(outIdx)
-                if (outBuf != null &&
-                    bufferInfo.size > 0 &&
-                    (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
-                ) {
-                    synchronized(muxerLock) {
-                        if (muxerStarted && videoTrackIndex >= 0 && muxer != null) {
-                            val relPts = max(0L, bufferInfo.presentationTimeUs - startMonoUs)
-                            val pts = max(lastVideoPtsUs + 1L, relPts)
-                            bufferInfo.presentationTimeUs = pts
-                            lastVideoPtsUs = pts
-                            outBuf.position(bufferInfo.offset)
-                            outBuf.limit(bufferInfo.offset + bufferInfo.size)
-                            muxer!!.writeSampleData(videoTrackIndex, outBuf, bufferInfo)
+                if (outBuf != null && bufferInfo.size > 0) {
+                    if (isLiveMode) {
+                        val relPts = max(0L, bufferInfo.presentationTimeUs - startMonoUs)
+                        val pts = max(lastVideoPtsUs + 1L, relPts)
+                        lastVideoPtsUs = pts
+                        rtmpStreamer?.sendVideoFrame(outBuf, bufferInfo, pts)
+                    } else if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                        synchronized(muxerLock) {
+                            if (muxerStarted && videoTrackIndex >= 0 && muxer != null) {
+                                val relPts = max(0L, bufferInfo.presentationTimeUs - startMonoUs)
+                                val pts = max(lastVideoPtsUs + 1L, relPts)
+                                bufferInfo.presentationTimeUs = pts
+                                lastVideoPtsUs = pts
+                                outBuf.position(bufferInfo.offset)
+                                outBuf.limit(bufferInfo.offset + bufferInfo.size)
+                                muxer!!.writeSampleData(videoTrackIndex, outBuf, bufferInfo)
+                            }
                         }
                     }
                 }
@@ -791,7 +933,9 @@ class ScreenRecordService : Service() {
         if (!stopping.compareAndSet(false, true)) return
 
         val wasRecording = isCurrentlyRecording
+        val wasLive = isCurrentlyLiveStreaming
         isCurrentlyRecording = false
+        isCurrentlyLiveStreaming = false
         val savedPath = outputPath
         val durationMs = if (startWallMs > 0L) {
             max(0L, System.currentTimeMillis() - startWallMs)
@@ -834,6 +978,12 @@ class ScreenRecordService : Service() {
             } catch (_: InterruptedException) {
             }
             videoDrainThread = null
+
+            try {
+                rtmpStreamer?.stop()
+            } catch (_: Throwable) {
+            }
+            rtmpStreamer = null
 
             try {
                 virtualDisplay?.release()
@@ -892,14 +1042,21 @@ class ScreenRecordService : Service() {
             externalMicRing.clear()
             playbackRing.clear()
 
-            if (!finalizedValid || error != null) {
+            if (!wasLive && (!finalizedValid || error != null)) {
                 try {
                     if (savedPath.isNotEmpty()) File(savedPath).delete()
                 } catch (_: Throwable) {
                 }
             }
 
-            if (wasRecording || error != null) {
+            if (wasLive) {
+                notifyLiveState(
+                    status = if (error != null) "error" else "stopped",
+                    bitrateKbps = 0,
+                    droppedFrames = lastLiveDroppedFrames,
+                    error = error
+                )
+            } else if (wasRecording || error != null) {
                 notifyState(
                     false,
                     if (finalizedValid && error == null) savedPath else null,
@@ -922,6 +1079,17 @@ class ScreenRecordService : Service() {
     ) {
         mainHandler.post {
             onStateChanged?.invoke(recording, filePath, durationMs, error)
+        }
+    }
+
+    private fun notifyLiveState(
+        status: String,
+        bitrateKbps: Int,
+        droppedFrames: Int,
+        error: String?
+    ) {
+        mainHandler.post {
+            onLiveStateChanged?.invoke(status, bitrateKbps, droppedFrames, error)
         }
     }
 

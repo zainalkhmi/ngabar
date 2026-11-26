@@ -14,6 +14,7 @@ import 'donation_dialog.dart';
 import 'maglis_chat_dialog.dart';
 import 'mistake_compare_dialog.dart';
 import 'screen_recordings_sheet.dart';
+import 'live_stream_sheet.dart';
 import 'dialog_base.dart';
 import '../../../audio/mistake_audio_service.dart';
 import '../../../audio/screen_recording_service.dart';
@@ -26,6 +27,7 @@ export 'maglis_chat_dialog.dart' show MaglisChatSheet;
 export 'mistake_compare_dialog.dart' show MistakeCompareDialog;
 export 'screen_recordings_sheet.dart'
     show ScreenRecordingsSheet, RecordingPreviewDialog;
+export 'live_stream_sheet.dart' show LiveStreamSheet;
 export 'dialog_base.dart';
 
 /// Centralized Dialog Service facade.
@@ -61,6 +63,23 @@ abstract final class DialogService {
     required SavedScreenRecording recording,
   }) {
     return RecordingPreviewDialog.show(context, recording: recording);
+  }
+
+  /// Opens the RTMP Live Streaming sheet (YouTube Live / Facebook Live).
+  static Future<void> showLiveStream(
+    BuildContext context, {
+    int? surah,
+    String? surahName,
+    int? ayah,
+    bool isExternalMicActive = false,
+  }) {
+    return LiveStreamSheet.show(
+      context,
+      surah: surah,
+      surahName: surahName,
+      ayah: ayah,
+      isExternalMicActive: isExternalMicActive,
+    );
   }
 
   /// Opens the Tajweed Phonetic Error breakdown bottom sheet.
@@ -146,8 +165,11 @@ abstract final class DialogService {
   }
 
   /// Displays the interactive "How to Use" / App Guide modal dialog.
-  static Future<void> showAppGuide(BuildContext context) {
-    return AppGuideDialog.show(context);
+  static Future<void> showAppGuide(
+    BuildContext context, {
+    int initialTab = 0,
+  }) {
+    return AppGuideDialog.show(context, initialTab: initialTab);
   }
 
   /// Displays the What's New / Guide dialog (alias for [showAppGuide]).

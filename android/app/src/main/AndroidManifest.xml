@@ -51,11 +51,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- Maglis Deep Links & App Links -->
+            <!-- Maglis Deep Links & App Links (natlu.pages.dev and ngabar.vercel.app) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="ngabar.vercel.app" android:pathPattern="/....."/>
+                <data android:scheme="https" android:host="ngabar.vercel.app" android:pathPrefix="/m"/>
                 <data android:scheme="https" android:host="natlu.pages.dev" android:pathPattern="/....."/>
                 <data android:scheme="https" android:host="natlu.pages.dev" android:pathPrefix="/m"/>
             </intent-filter>

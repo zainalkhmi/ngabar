@@ -69,6 +69,68 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
   bool _isJoining = false;
   bool _isCreating = false;
 
+  // Schedule (Jadwal Mulai Majlis) state
+  DateTime? _scheduledDateTime;
+
+  Future<void> _pickScheduleTime(BuildContext context) async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _scheduledDateTime ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+      builder: (ctx, child) {
+        final isDark = AppState.instance.isDarkMode;
+        return Theme(
+          data: isDark ? ThemeData.dark() : ThemeData.light(),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (pickedDate == null || !context.mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _scheduledDateTime != null
+          ? TimeOfDay(hour: _scheduledDateTime!.hour, minute: _scheduledDateTime!.minute)
+          : TimeOfDay(hour: (now.hour + 1) % 24, minute: 0),
+      builder: (ctx, child) {
+        final isDark = AppState.instance.isDarkMode;
+        return Theme(
+          data: isDark ? ThemeData.dark() : ThemeData.light(),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _scheduledDateTime = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+
+    final isId = AppState.instance.isIndonesian;
+    final hh = pickedTime.hour.toString().padLeft(2, '0');
+    final mm = pickedTime.minute.toString().padLeft(2, '0');
+    final dd = pickedDate.day.toString().padLeft(2, '0');
+    final mo = pickedDate.month.toString().padLeft(2, '0');
+    AppState.instance.showBanner(AppBannerInfo(
+      id: 'maglis_schedule_set',
+      messageAr: 'تم تحديد موعد المجلس: $dd/$mo $hh:$mm',
+      messageEn: 'Scheduled for: $dd/$mo $hh:$mm',
+      messageId: isId
+          ? 'Jadwal disetel: $dd/$mo/${pickedDate.year} pukul $hh:$mm WIB'
+          : 'Scheduled for $dd/$mo at $hh:$mm',
+      icon: Icons.event_available_rounded,
+      customDuration: const Duration(seconds: 3),
+    ));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -512,16 +574,13 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
                     ),
                     const SizedBox(height: 18),
 
-                    // 3. Tab Body (Fixed height — ZERO height jumping when switching tabs)
-                    SizedBox(
-                      height: 204,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: _selectedTab == 0
-                            ? _buildModernJoinBody(isDark, isAr, c, borderColor)
-                            : _buildModernCreateBody(
-                                isDark, isAr, c, borderColor),
-                      ),
+                    // 3. Tab Body
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: _selectedTab == 0
+                          ? _buildModernJoinBody(isDark, isAr, c, borderColor)
+                          : _buildModernCreateBody(
+                              isDark, isAr, c, borderColor),
                     ),
                   ],
                 ),
@@ -833,14 +892,12 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
     final isId = AppState.instance.isIndonesian;
     final text = _codeCtrl.text.trim();
 
-    return SizedBox(
-      height: 204,
-      child: Column(
-        key: const ValueKey('join_tab_body'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Hero Maglis Code Card
+    return Column(
+      key: const ValueKey('join_tab_body'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Hero Maglis Code Card
           GestureDetector(
             onTap: _openKeyboard,
             behavior: HitTestBehavior.opaque,
@@ -1139,6 +1196,7 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
 
           // Submit Button (matching Open Maglis button)
           SizedBox(
@@ -1180,8 +1238,7 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   /// Modern, intuitive Create UI with strictly LTR Maglis code slots, separate copy button, and human copy
@@ -1191,14 +1248,12 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
     final displayCode = _newCode;
     final displayDigits = displayCode.split('');
 
-    return SizedBox(
-      height: 204,
-      child: Column(
-        key: const ValueKey('create_tab_body'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Hero Maglis Code Card
+    return Column(
+      key: const ValueKey('create_tab_body'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Hero Maglis Code Card
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
@@ -1334,10 +1389,13 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
                         borderRadius: BorderRadius.circular(18),
                         onTap: () async {
                           final text = MaglisLinkService.formatInviteText(
-                              _newCode,
-                              isArabic: false);
+                            _newCode,
+                            isArabic: false,
+                            isIndonesian: isId,
+                            scheduledTime: _scheduledDateTime,
+                          );
                           final subject = isId
-                              ? 'Undangan Majelis Tilawah Al-Qur\'an (ngabar)'
+                              ? 'Undangan Majelis Ngaji Bareng (ngabar)'
                               : 'Quran Majlis Invitation';
                           Rect? origin;
                           final box = context.findRenderObject() as RenderBox?;
@@ -1429,9 +1487,85 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
                     ],
                   ),
                 ),
+
+                const SizedBox(height: 10),
+
+                // 4. Zoom-style Schedule (Kapan Majlis Dimulai) Button & Chip
+                GestureDetector(
+                  onTap: () => _pickScheduleTime(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _scheduledDateTime != null
+                          ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.16 : 0.10)
+                          : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.035)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _scheduledDateTime != null
+                            ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.50 : 0.35)
+                            : borderColor,
+                        width: _scheduledDateTime != null ? 1.2 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _scheduledDateTime != null
+                              ? Icons.event_available_rounded
+                              : Icons.schedule_rounded,
+                          size: 15,
+                          color: _scheduledDateTime != null
+                              ? const Color(0xFF10B981)
+                              : c.muted,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            _scheduledDateTime != null
+                                ? (isId
+                                    ? 'Mulai: ${_scheduledDateTime!.day}/${_scheduledDateTime!.month} ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')} WIB'
+                                    : 'Starts: ${_scheduledDateTime!.day}/${_scheduledDateTime!.month} ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}')
+                                : (isId ? 'Atur Jadwal / Kapan Dimulai (Opsional)' : 'Schedule Start Time (Optional)'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: _scheduledDateTime != null
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                              color: _scheduledDateTime != null
+                                  ? (_selectedTab == 1 && isDark
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFF047857))
+                                  : c.muted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (_scheduledDateTime != null) ...[
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _scheduledDateTime = null);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(2.0),
+                              child: Icon(Icons.close_rounded, size: 14, color: c.muted),
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.edit_calendar_rounded, size: 13, color: c.muted),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
+
+          const SizedBox(height: 12),
 
           // Start Maglis Button
           SizedBox(
@@ -1465,7 +1599,6 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 }

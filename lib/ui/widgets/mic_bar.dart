@@ -1,10 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/platform_utils.dart';
 import '../../core/app_state.dart';
+import '../../core/maglis_link_service.dart';
 import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 import '../../audio/screen_recording_service.dart';
+import 'dialogs/live_stream_sheet.dart';
 
 enum MicBarMode { recording, maglis, maglisRecording, normal }
 
@@ -33,6 +37,8 @@ class BottomActionBar extends StatelessWidget {
   final String? maglisRoomCode;
   final int maglisPeerCount;
   final bool isRemoteReciting;
+  final bool isIqroMode;
+  final VoidCallback? onIqroTap;
 
   const BottomActionBar({
     super.key,
@@ -60,6 +66,8 @@ class BottomActionBar extends StatelessWidget {
     this.maglisRoomCode,
     this.maglisPeerCount = 0,
     this.isRemoteReciting = false,
+    this.isIqroMode = false,
+    this.onIqroTap,
   });
 
   MicBarMode get mode => isInMaglis
@@ -564,6 +572,49 @@ class BottomActionBar extends StatelessWidget {
                                                 dockHeight: dockHeight,
                                               ),
                                             ),
+                                            if (onIqroTap != null) ...[
+                                              SizedBox(width: gap),
+                                              _buildActionButton(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.auto_stories_rounded,
+                                                      size: 16.5,
+                                                      color: _btnFg(
+                                                        isDark,
+                                                        isActive: isIqroMode,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      'IQRO',
+                                                      style: TextStyle(
+                                                        fontFamily: 'cairo',
+                                                        fontSize: 7.5,
+                                                        height: 1.0,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: _btnFg(
+                                                          isDark,
+                                                          isActive: isIqroMode,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                tooltip: isAr
+                                                    ? 'تعلم اقرأ (١-٦)'
+                                                    : "Belajar Iqro' (Jilid 1–6)",
+                                                isActive: isIqroMode,
+                                                isDark: isDark,
+                                                borderlessWhenInactive: true,
+                                                width: stdBtnWidth,
+                                                height: btnHeight,
+                                                dockHeight: dockHeight,
+                                                onTap: onIqroTap!,
+                                              ),
+                                            ],
                                             if (onVoiceSearchTap != null) ...[
                                               SizedBox(width: gap),
                                               _buildActionButton(
@@ -883,12 +934,16 @@ class BottomActionBar extends StatelessWidget {
             sr.elapsedSecondsNotifier,
             sr.recordingsNotifier,
             sr.totalBytesNotifier,
+            sr.isLiveStreamingNotifier,
+            sr.liveElapsedSecondsNotifier,
           ]),
           builder: (_, __) {
             final bool blurActive = app.isBlurMode;
             final bool tajweedActive = app.currentMode == AppMode.tajweed;
             final bool screenRecActive = sr.isRecordingNotifier.value;
+            final bool liveActive = sr.isLiveStreamingNotifier.value;
             final int elapsedSec = sr.elapsedSecondsNotifier.value;
+            final int liveSec = sr.liveElapsedSecondsNotifier.value;
             final int savedCount = sr.recordingsNotifier.value.length;
             final String savedSize =
                 SavedScreenRecording.formatBytes(sr.totalBytesNotifier.value);
@@ -933,6 +988,51 @@ class BottomActionBar extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
+                    if (MaglisController.instance.inSession) ...[
+                      _buildToolsTile(
+                        icon: Icons.share_rounded,
+                        title: isId
+                            ? 'Undang Teman (Salin / Bagikan Link)'
+                            : (isAr ? 'دعوة للمجلس (مشاركة الرابط)' : 'Invite Friends (Share Link)'),
+                        subtitle: isId
+                            ? 'Bisa dibuka di HP/Laptop via browser (https://ngabar.vercel.app)'
+                            : 'Open via browser without installing app',
+                        isDark: isDark,
+                        textCol: textCol,
+                        subCol: subCol,
+                        onTap: () async {
+                          Navigator.of(sheetCtx).pop();
+                          final code = MaglisController.instance.roomCode;
+                          final inviteText = MaglisLinkService.formatInviteText(
+                            code,
+                            isArabic: isAr,
+                            isIndonesian: isId,
+                          );
+                          final subject = isId
+                              ? 'Undangan Majelis Ngaji Bareng (ngabar)'
+                              : 'Quran Majlis Invitation';
+                          try {
+                            await SharePlus.instance.share(ShareParams(
+                              text: inviteText,
+                              subject: subject,
+                              title: subject,
+                            ));
+                          } catch (_) {
+                            final link = MaglisLinkService.formatUrl(code);
+                            Clipboard.setData(ClipboardData(text: link));
+                            AppState.instance.showBanner(AppBannerInfo(
+                              id: 'maglis_link_copied',
+                              messageAr: 'تم نسخ رابط المجلس: $link',
+                              messageEn: 'Majlis link copied: $link',
+                              messageId: 'Tautan Majelis disalin: $link',
+                              icon: Icons.link_rounded,
+                              customDuration: const Duration(seconds: 2),
+                            ));
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     _buildToolsTile(
                       icon: Icons.menu_book_rounded,
                       title: isId
@@ -995,6 +1095,36 @@ class BottomActionBar extends StatelessWidget {
                         onTap: () {
                           Navigator.of(sheetCtx).pop();
                           onOpenRecordingsTap!();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (sr.isSupported) ...[
+                      _buildToolsTile(
+                        icon: Icons.sensors_rounded,
+                        title: isId
+                            ? (liveActive
+                                ? 'Live Streaming Aktif'
+                                : 'Live Streaming (YT / FB)')
+                            : (liveActive
+                                ? 'Live Stream Active'
+                                : 'Live Stream (YT / FB)'),
+                        subtitle: liveActive
+                            ? 'LIVE · ${SavedScreenRecording.formatDuration(liveSec * 1000)}'
+                            : (isId
+                                ? 'Siaran langsung via RTMP • Encoder Aman AI'
+                                : 'Broadcast via RTMP • AI-Safe Encoder'),
+                        isActive: liveActive,
+                        isDark: isDark,
+                        textCol: textCol,
+                        subCol: subCol,
+                        onTap: () {
+                          Navigator.of(sheetCtx).pop();
+                          LiveStreamSheet.show(
+                            context,
+                            surahName: surahName,
+                            isExternalMicActive: isRecording || isVoiceSearching,
+                          );
                         },
                       ),
                       const SizedBox(height: 8),

@@ -33,6 +33,7 @@ import 'core/highlighting_controller.dart';
 import 'ui/tracking_screen.dart';
 import 'mushaf/mushaf_view.dart';
 import 'maglis/maglis_controller.dart';
+import 'iqro/iqro_controller.dart';
 import 'maglis/maglis_core.dart';
 import 'core/maglis_link_service.dart';
 import 'core/app_audio_processor.dart';
@@ -311,6 +312,84 @@ class _OrchestratorState extends State<_Orchestrator>
   DateTime? _maglisSoloSince;
   bool _hasAttachedMaglisBroadcast = false;
 
+  // ── Recitation Stuck Watchdog (zero-AI-overhead vocal + cursor monitor) ──
+  static const int _stuckVoicedThresholdMs = 4200;
+  static const int _stuckCooldownMs = 22000;
+  int _lastProgressSurah = 0;
+  int _lastProgressAyah = 0;
+  int _lastProgressReadCount = -1;
+  int _voicedStallMs = 0;
+  int _lastProgressEpochMs = 0;
+  int _lastStuckBannerEpochMs = 0;
+
+  void _resetStuckWatchdog({bool dismissBanner = true}) {
+    _voicedStallMs = 0;
+    _lastProgressEpochMs = DateTime.now().millisecondsSinceEpoch;
+    _lastProgressReadCount = -1;
+    if (dismissBanner) {
+      AppState.instance.dismissRecitationStuckBanner();
+    }
+  }
+
+  void _onControllerProgressTick() {
+    if (!_isRecording || _ctrl == null) return;
+    final int surah = _ctrl!.targetSurah;
+    final int? ayah = _ctrl!.activeAyah.value;
+    int readCount = 0;
+    if (surah > 0 && ayah != null && ayah > 0) {
+      final verse = _ctrl!.repository.getVerse(surah, ayah);
+      final int wordCount = verse?.uthmaniWords.length ?? 0;
+      for (int i = 0; i < wordCount; i++) {
+        if (_ctrl!.isWordRead(ayah, i, surah: surah)) {
+          readCount++;
+        }
+      }
+    }
+    final int ayahKey = ayah ?? 0;
+    if (surah != _lastProgressSurah ||
+        ayahKey != _lastProgressAyah ||
+        readCount != _lastProgressReadCount) {
+      _lastProgressSurah = surah;
+      _lastProgressAyah = ayahKey;
+      _lastProgressReadCount = readCount;
+      _voicedStallMs = 0;
+      _lastProgressEpochMs = DateTime.now().millisecondsSinceEpoch;
+      AppState.instance.dismissRecitationStuckBanner();
+    }
+  }
+
+  void _trackChunkForStuckDetector(Float32List chunk) {
+    if (!_isRecording || chunk.isEmpty) return;
+    double sumAbs = 0.0;
+    double peak = 0.0;
+    int samples = 0;
+    for (int i = 0; i < chunk.length; i += 8) {
+      final double v = chunk[i].abs();
+      sumAbs += v;
+      if (v > peak) peak = v;
+      samples++;
+    }
+    if (samples == 0) return;
+    final double meanAbs = sumAbs / samples;
+    if (meanAbs < 0.011 && peak < 0.035) return;
+
+    final int chunkMs = ((chunk.length * 1000) / 16000).round().clamp(10, 400);
+    _voicedStallMs += chunkMs;
+    if (_voicedStallMs < _stuckVoicedThresholdMs) return;
+
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastProgressEpochMs < _stuckVoicedThresholdMs) return;
+    if (nowMs - _lastStuckBannerEpochMs < _stuckCooldownMs) return;
+
+    _voicedStallMs = 0;
+    _lastStuckBannerEpochMs = nowMs;
+    if (!mounted) return;
+    AppState.instance.showRecitationStuckBanner(
+      isTajweedMode: AppState.instance.currentMode == AppMode.tajweed,
+      onOpenGuide: (ctx) => DialogService.showAppGuide(ctx, initialTab: 1),
+    );
+  }
+
   void _cancelEnginePrewarm() {
     _prewarmEpoch++;
     _enginePrewarmTimer?.cancel();
@@ -344,6 +423,13 @@ class _OrchestratorState extends State<_Orchestrator>
     );
     _transcriptionSub?.cancel();
     _transcriptionSub = _engine.transcriptionStream.listen((res) {
+      if (AppState.instance.isIqroMode && _isRecording && mounted) {
+        IqroController.instance.onTranscription(
+          res.text,
+          isFinal: res.isFinal,
+        );
+        return;
+      }
       if (_isVoiceSearching && !_isVoiceSearchPaused && mounted) {
         if (res.text.isNotEmpty) {
           _voiceSearchAsrNotifier.value = res.text;
@@ -664,6 +750,8 @@ class _OrchestratorState extends State<_Orchestrator>
         .removeListener(_onMistakePlaybackChanged);
     MistakeAudioService.instance.stopPlayback();
     _transcriptionSub?.cancel();
+    _ctrl?.removeListener(_onControllerProgressTick);
+    _ctrl?.activeAyah.removeListener(_onControllerProgressTick);
     _audio.dispose();
     _ctrl?.dispose();
     _voiceSearchAsrNotifier.dispose();
@@ -711,6 +799,8 @@ class _OrchestratorState extends State<_Orchestrator>
         },
       );
       _syncMaglisBroadcastListeners();
+      _ctrl!.addListener(_onControllerProgressTick);
+      _ctrl!.activeAyah.addListener(_onControllerProgressTick);
       await _ctrl!.setTargetSurah(initialSurah);
       _ctrl!.setManualAyah(initialSurah, initialAyah);
 
@@ -906,7 +996,12 @@ class _OrchestratorState extends State<_Orchestrator>
           }
           ScreenRecordingService.instance.appendFloat32MicChunk(chunk);
           MistakeAudioService.instance.appendFloat32Chunk(chunk);
-          _ctrl?.feed(chunk, isFinal: isFinal);
+          if (AppState.instance.isIqroMode) {
+            _engine.transcribe(chunk, isFinal: isFinal);
+          } else {
+            _ctrl?.feed(chunk, isFinal: isFinal);
+          }
+          _trackChunkForStuckDetector(chunk);
         },
       );
     } catch (e) {
@@ -972,6 +1067,7 @@ class _OrchestratorState extends State<_Orchestrator>
 
     try {
       if (_isRecording) {
+        _resetStuckWatchdog();
         _maglisBroadcastThrottle?.cancel();
         MistakeAudioService.instance.flushPendingAndResetRing();
         await _audio.stop();
@@ -980,8 +1076,12 @@ class _OrchestratorState extends State<_Orchestrator>
           inMaglis: MaglisController.instance.inSession,
         ));
         _engine.resetBuffer();
-        _ctrl?.finalize();
-        if (MaglisController.instance.inSession) {
+        if (AppState.instance.isIqroMode) {
+          IqroController.instance.resetSessionBuffer();
+        } else {
+          _ctrl?.finalize();
+        }
+        if (!AppState.instance.isIqroMode && MaglisController.instance.inSession) {
           _broadcastMaglisProgress();
           unawaited(MaglisController.instance.releaseFloor(
             page: AppState.instance.currentMushafPage.value,
@@ -1013,6 +1113,14 @@ class _OrchestratorState extends State<_Orchestrator>
 
         QuranAudioService.instance.stop();
         _engine.resetBuffer();
+
+        if (AppState.instance.isIqroMode) {
+          IqroController.instance.resetSessionBuffer();
+          if (mounted) setState(() => _isRecording = true);
+          _resetStuckWatchdog();
+          await _startAudioRecordingStream();
+          return;
+        }
 
         if (_ctrl != null) {
           final int currentPage = AppState.instance.currentMushafPage.value;
@@ -1110,6 +1218,8 @@ class _OrchestratorState extends State<_Orchestrator>
             ));
           }
           if (mounted) setState(() => _isRecording = true);
+          _resetStuckWatchdog();
+          _onControllerProgressTick();
           _broadcastMaglisProgress();
           MistakeAudioService.instance.resetRingBuffer();
           await _startAudioRecordingStream();
@@ -1138,6 +1248,7 @@ class _OrchestratorState extends State<_Orchestrator>
     if (!_isRecording) return;
     _isRecording = false;
     _isToggling = false;
+    _resetStuckWatchdog();
     _maglisBroadcastThrottle?.cancel();
     MistakeAudioService.instance.flushPendingAndResetRing();
     _audio.stop();

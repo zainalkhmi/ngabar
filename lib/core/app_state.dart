@@ -60,6 +60,10 @@ class AppBannerInfo {
   final Color Function(ThemeColors c, bool isDark)? customColor;
   final bool isWarning;
   final Duration? customDuration;
+  final String? actionLabelAr;
+  final String? actionLabelEn;
+  final String? actionLabelId;
+  final void Function(BuildContext context)? onActionTap;
 
   const AppBannerInfo({
     required this.id,
@@ -70,6 +74,10 @@ class AppBannerInfo {
     this.customColor,
     this.isWarning = false,
     this.customDuration,
+    this.actionLabelAr,
+    this.actionLabelEn,
+    this.actionLabelId,
+    this.onActionTap,
   });
 
   String resolve(AppState app) {
@@ -77,6 +85,12 @@ class AppBannerInfo {
       return messageId ?? messageEn;
     }
     return messageEn;
+  }
+
+  String? resolveActionLabel(AppState app) {
+    if (app.isIndonesian) return actionLabelId ?? actionLabelEn;
+    if (app.isArabic) return actionLabelAr ?? actionLabelEn;
+    return actionLabelEn;
   }
 }
 
@@ -301,6 +315,39 @@ class AppState extends ChangeNotifier {
   final ValueNotifier<int> currentMushafPage = ValueNotifier<int>(1);
   bool wasInVerseListBeforeMaglis = false;
   bool hasSeenMaglisExplanation = false;
+
+  // ── Iqro Learning Mode ─────────────────────────────────────────────────────
+  bool isIqroMode = false;
+  final ValueNotifier<bool> iqroModeNotifier = ValueNotifier<bool>(false);
+  int iqroJilid = 1;
+  int iqroPage = 1;
+  final ValueNotifier<({int jilid, int page})> iqroPositionNotifier =
+      ValueNotifier<({int jilid, int page})>((jilid: 1, page: 1));
+
+  Future<void> setIqroMode(bool value) async {
+    if (isIqroMode != value) {
+      isIqroMode = value;
+      iqroModeNotifier.value = value;
+      notifyListeners();
+      final prefs = await _getPrefs();
+      await prefs.setBool('iqroMode', isIqroMode);
+    }
+  }
+
+  Future<void> setIqroPosition(int jilid, int page) async {
+    final int clampedJilid = jilid.clamp(1, 6);
+    final int maxPage = clampedJilid == 1 ? 32 : 30;
+    final int clampedPage = page.clamp(1, maxPage);
+    if (iqroJilid != clampedJilid || iqroPage != clampedPage) {
+      iqroJilid = clampedJilid;
+      iqroPage = clampedPage;
+      iqroPositionNotifier.value = (jilid: clampedJilid, page: clampedPage);
+      notifyListeners();
+      final prefs = await _getPrefs();
+      await prefs.setInt('iqroJilid', clampedJilid);
+      await prefs.setInt('iqroPage', clampedPage);
+    }
+  }
 
   void enterMaglisSession([int? mappedPage]) {
     if (!isMushafMode) {
@@ -719,6 +766,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Displays actionable guidance when live recitation tracking appears stuck
+  /// despite active vocal input. Automatically clears once cursor advances.
+  void showRecitationStuckBanner({
+    required bool isTajweedMode,
+    void Function(BuildContext context)? onOpenGuide,
+  }) {
+    showBanner(AppBannerInfo(
+      id: 'recitation_stuck',
+      messageAr:
+          'توقف المؤشر؟ أعد نطق الكلمة بوضوح، أو اقرأ كلمتين للأمام، أو اضغط الآية لإعادة التوجيه.',
+      messageEn: isTajweedMode
+          ? 'Tracking paused • Keep word endings & Madd steady, read 2–3 words ahead, or tap the verse.'
+          : 'Tracking paused • Pronounce clearly, read 2–3 words ahead, or tap the verse on screen.',
+      messageId: isTajweedMode
+          ? 'Bacaan tertahan • Jaga panjang mad & huruf akhir jelas, lanjut 2–3 kata, atau ketuk langsung ayat.'
+          : 'Bacaan tertahan • Ucapkan harakat lebih jelas, lanjut 2–3 kata, atau ketuk langsung ayat.',
+      icon: Icons.support_agent_rounded,
+      isWarning: true,
+      customDuration: const Duration(seconds: 7),
+      actionLabelId: onOpenGuide != null ? 'Tips' : null,
+      actionLabelEn: onOpenGuide != null ? 'Tips' : null,
+      actionLabelAr: onOpenGuide != null ? 'نصائح' : null,
+      onActionTap: onOpenGuide,
+    ));
+  }
+
+  /// Immediately dismisses the stuck recitation hint once tracking moves again.
+  void dismissRecitationStuckBanner() {
+    if (currentBanner?.id == 'recitation_stuck') {
+      dismissBanner();
+    }
+  }
+
   // ── Colors ─────────────────────────────────────────────────────────────────
 
   /// Returns the active color palette based on the current theme.
@@ -880,6 +960,12 @@ class AppState extends ChangeNotifier {
 
       isMushafMode = prefs.getBool('mushafMode') ?? true;
       mushafModeNotifier.value = isMushafMode;
+      isIqroMode = prefs.getBool('iqroMode') ?? false;
+      iqroModeNotifier.value = isIqroMode;
+      iqroJilid = (prefs.getInt('iqroJilid') ?? 1).clamp(1, 6);
+      final int maxIqroPage = iqroJilid == 1 ? 32 : 30;
+      iqroPage = (prefs.getInt('iqroPage') ?? 1).clamp(1, maxIqroPage);
+      iqroPositionNotifier.value = (jilid: iqroJilid, page: iqroPage);
       autoScrollSpeed = prefs.getInt('autoScrollSpeed') ?? 2;
       hasChosenAutoScrollSpeed = prefs.getBool('has_chosen_speed') ?? false;
       hasSeenMaglisExplanation =

@@ -399,6 +399,58 @@ class SettingsSheet extends StatelessWidget {
                         },
                       ),
 
+                      // 3c. Live Streaming (YouTube / Facebook RTMP)
+                      SettingDivider(c: c),
+                      ListenableBuilder(
+                        listenable: Listenable.merge([
+                          ScreenRecordingService.instance.isLiveStreamingNotifier,
+                          ScreenRecordingService.instance.liveElapsedSecondsNotifier,
+                        ]),
+                        builder: (context, _) {
+                          final isLive = ScreenRecordingService
+                              .instance.isLiveStreamingNotifier.value;
+                          final secs = ScreenRecordingService
+                              .instance.liveElapsedSecondsNotifier.value;
+                          final badgeColor = isLive
+                              ? const Color(0xFFE11D48)
+                              : const Color(0xFF2563EB);
+                          return SettingTile(
+                            icon: Icons.sensors_rounded,
+                            title: isId
+                                ? 'Live Streaming (YT / FB)'
+                                : 'Live Streaming (RTMP)',
+                            c: c,
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: badgeColor
+                                    .withValues(alpha: isDark ? 0.18 : 0.10),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: badgeColor
+                                      .withValues(alpha: isDark ? 0.38 : 0.24),
+                                ),
+                              ),
+                              child: Text(
+                                isLive
+                                    ? 'LIVE ${SavedScreenRecording.formatDuration(secs * 1000)}'
+                                    : 'RTMP • AI-Safe',
+                                style: TextStyle(
+                                  color: badgeColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              DialogService.showLiveStream(context);
+                            },
+                          );
+                        },
+                      ),
+
                       // 4. Dukung Pengembangan Aplikasi
                       SettingDivider(c: c),
                       SettingTile(
@@ -659,8 +711,8 @@ class SettingsSheet extends StatelessWidget {
                                 const SizedBox(width: 4),
                                 Text(
                                   app.isIndonesian
-                                      ? 'Panduan Penggunaan'
-                                      : 'How to Use',
+                                      ? 'Panduan Lengkap'
+                                      : 'Complete Guide',
                                   style: TextStyle(
                                     color: c.textSecondary.withValues(alpha: 0.70),
                                     fontSize: 12,

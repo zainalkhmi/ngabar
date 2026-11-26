@@ -18,6 +18,8 @@ import 'widgets/mic_bar.dart';
 import '../mushaf/mushaf_view.dart';
 import '../verse_list/verse_list_view.dart';
 import '../maglis/maglis_controller.dart';
+import '../iqro/iqro_view.dart';
+import '../iqro/iqro_picker_sheet.dart';
 
 /// Main interactive screen for real-time recitation tracking and reading.
 /// Supports high-performance vector Mushaf and dedicated Verse List modes.
@@ -83,12 +85,15 @@ class _TrackingScreenState extends State<TrackingScreen>
       app.themeNotifier,
       app.languageNotifier,
       app.mushafModeNotifier,
+      app.iqroModeNotifier,
     ]);
     _bottomBarListenable = Listenable.merge([
       app.themeNotifier,
       app.languageNotifier,
       app.blurModeNotifier,
       app.modeNotifier,
+      app.iqroModeNotifier,
+      app.iqroPositionNotifier,
       _surahNotifier,
       MaglisController.instance.sessionListenable,
       ScreenRecordingService.instance.isRecordingNotifier,
@@ -475,8 +480,17 @@ class _TrackingScreenState extends State<TrackingScreen>
                                     app.dismissTajweedBanner();
                                   }
                                 },
-                                surahName: surahName,
-                                onSurahTap: _showSurahPicker,
+                                surahName: app.isIqroMode
+                                    ? "Iqro' ${app.iqroJilid} • ${app.iqroPage}"
+                                    : surahName,
+                                onSurahTap: app.isIqroMode
+                                    ? () => IqroPickerSheet.show(context)
+                                    : _showSurahPicker,
+                                isIqroMode: app.isIqroMode,
+                                onIqroTap: () {
+                                  app.dismissBanner();
+                                  IqroPickerSheet.show(context);
+                                },
                                 onSettingsTap: () {
                                   _showSettingsDialog();
                                 },
@@ -609,6 +623,10 @@ class _TrackingScreenState extends State<TrackingScreen>
         sr.isRecordingNotifier,
         sr.elapsedSecondsNotifier,
         sr.latestCompletedNotifier,
+        sr.isLiveStreamingNotifier,
+        sr.liveStatusNotifier,
+        sr.liveElapsedSecondsNotifier,
+        sr.liveBitrateKbpsNotifier,
       ]),
       builder: (context, _) {
         if (app.bannerNotifier.value != null) {
@@ -619,12 +637,17 @@ class _TrackingScreenState extends State<TrackingScreen>
         final bool showMistakePill =
             !widget.isRecording && clips.isNotEmpty;
         final bool showMaglisPill = maglis.inSession;
-        final bool showScreenRecPill = sr.isRecordingNotifier.value;
+        final bool showLivePill = sr.isLiveStreamingNotifier.value;
+        final bool showScreenRecPill =
+            !showLivePill && sr.isRecordingNotifier.value;
         final SavedScreenRecording? completedRec =
-            !showScreenRecPill ? sr.latestCompletedNotifier.value : null;
+            (!showScreenRecPill && !showLivePill)
+                ? sr.latestCompletedNotifier.value
+                : null;
 
         if (!showMistakePill &&
             !showMaglisPill &&
+            !showLivePill &&
             !showScreenRecPill &&
             completedRec == null) {
           return const SizedBox.shrink();
@@ -848,7 +871,74 @@ class _TrackingScreenState extends State<TrackingScreen>
         }
 
         Widget? screenRecWidget;
-        if (showScreenRecPill) {
+        if (showLivePill) {
+          final liveStatus = sr.liveStatusNotifier.value;
+          final int secs = sr.liveElapsedSecondsNotifier.value;
+          final int kbps = sr.liveBitrateKbpsNotifier.value;
+          final String timeStr =
+              SavedScreenRecording.formatDuration(secs * 1000);
+          final bool isConnecting = liveStatus == LiveStreamStatus.connecting;
+          final String label = isConnecting
+              ? (isId ? 'MENGHUBUNGKAN...' : 'CONNECTING...')
+              : (kbps > 0 ? 'LIVE $timeStr · $kbps kbps' : 'LIVE $timeStr');
+          screenRecWidget = Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () {
+                final int surah = _effectiveSurah;
+                DialogService.showLiveStream(
+                  context,
+                  surah: surah,
+                  surahName: _getSurahName(surah, app.isArabic),
+                  ayah: widget.controller.activeAyah.value ?? app.lastAyah,
+                  isExternalMicActive:
+                      widget.isRecording || widget.isVoiceSearching,
+                );
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isConnecting
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFFE11D48),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isConnecting
+                              ? const Color(0xFFD97706)
+                              : const Color(0xFFE11D48))
+                          .withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.sensors_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else if (showScreenRecPill) {
           final int secs = sr.elapsedSecondsNotifier.value;
           final String timeStr =
               SavedScreenRecording.formatDuration(secs * 1000);
@@ -1211,6 +1301,43 @@ class _TrackingScreenState extends State<TrackingScreen>
                               isAr ? TextDirection.rtl : TextDirection.ltr,
                         ),
                       ),
+                      if (banner.onActionTap != null &&
+                          banner.resolveActionLabel(app) != null) ...[
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () {
+                            final cb = banner.onActionTap;
+                            app.dismissBanner();
+                            cb?.call(context);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(
+                                  alpha: isDark ? 0.24 : 0.14),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: accentColor.withValues(
+                                    alpha: isDark ? 0.50 : 0.36),
+                                width: 0.9,
+                              ),
+                            ),
+                            child: Text(
+                              banner.resolveActionLabel(app)!,
+                              style: TextStyle(
+                                color: isDark
+                                    ? const Color(0xFFFDE68A)
+                                    : accentColor,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1223,6 +1350,15 @@ class _TrackingScreenState extends State<TrackingScreen>
   }
 
   Widget _buildVerseContent(ThemeColors c, AppState app) {
+    if (app.isIqroMode) {
+      return IqroView(
+        key: const ValueKey('iqro_view_main'),
+        c: c,
+        isRecording: widget.isRecording,
+        onExitIqro: () => app.setIqroMode(false),
+      );
+    }
+
     if (app.isMushafMode) {
       return MushafView(
         key: const ValueKey('mushaf_view_main'),

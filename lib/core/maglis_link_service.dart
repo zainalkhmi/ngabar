@@ -14,7 +14,8 @@ class MaglisLinkService {
   MaglisLinkService._();
   static final MaglisLinkService instance = MaglisLinkService._();
 
-  static const String baseUrl = 'https://natlu.pages.dev';
+  static const String baseUrl = 'https://ngabar.vercel.app';
+  static const String fallbackBaseUrl = 'https://natlu.pages.dev';
 
   AppLinks? _appLinks;
   StreamSubscription<Uri>? _sub;
@@ -27,24 +28,65 @@ class MaglisLinkService {
   /// Whether a room code arrived before the app finished initialization
   bool get hasPendingRoomCode => _pendingRoomCode != null;
 
-  /// Builds short HTTPS share link: https://natlu.pages.dev/48291
+  /// Builds short HTTPS share link: https://ngabar.vercel.app/48291
   static String formatUrl(String code) => '$baseUrl/$code';
 
-  /// Builds rich invitation message for any platform
-  static String formatInviteText(String code, {required bool isArabic}) {
+  /// Builds rich Zoom-style invitation message for any platform with schedule time support
+  static String formatInviteText(
+    String code, {
+    required bool isArabic,
+    bool isIndonesian = true,
+    DateTime? scheduledTime,
+    String? topic,
+  }) {
     final link = formatUrl(code);
+    String scheduleLine = '';
+    if (scheduledTime != null) {
+      final hour = scheduledTime.hour.toString().padLeft(2, '0');
+      final min = scheduledTime.minute.toString().padLeft(2, '0');
+      final day = scheduledTime.day.toString().padLeft(2, '0');
+      final month = scheduledTime.month.toString().padLeft(2, '0');
+      final dateStr = '$day/$month/${scheduledTime.year} pukul $hour:$min WIB';
+      if (isArabic) {
+        scheduleLine = '📅 موعد الانعقاد: $dateStr\n';
+      } else if (isIndonesian) {
+        scheduleLine = '📅 Waktu Mulai: $dateStr\n';
+      } else {
+        scheduleLine = '📅 Scheduled: $dateStr\n';
+      }
+    }
+
     if (isArabic) {
       return '> إن الذين يتلون كتاب الله وأقاموا الصلاة وأنفقوا مما رزقناهم سرا وعلانية يرجون تجارة لن تبور\n\n'
-          'منتظرك في مجلس التلاوة في تطبيق "اتلو القران" ❤️\n\n'
-          '🔗 رابط الدخول:\n'
+          'منتظرك في مجلس تلاوة القرآن على "ngabar" ❤️\n\n'
+          '$scheduleLine'
+          '🔗 رابط الانضمام المباشر (تطبيق أو متصفح بدون تثبيت):\n'
           '$link\n\n'
           'رمز المجلس: $code';
-    } else {
-      return '> Indeed, those who recite the Book of Allah and establish prayer and spend out of what We have provided them, secretly and publicly, expect a trade that will never perish.\n\n'
-          'Waiting for you in our recitation circle on "Recite Quran" ❤️\n\n'
-          '🔗 Direct Link:\n'
+    } else if (isIndonesian) {
+      final topicLine = (topic != null && topic.trim().isNotEmpty)
+          ? '📖 Topik / Tadarus: ${topic.trim()}\n'
+          : '';
+      return '✨ Undangan Majelis Ngaji Bareng (ngabar) ✨\n\n'
+          '$topicLine'
+          '$scheduleLine'
+          'Bergabunglah ke halaqah tilawah kami! Jika belum install aplikasi, Anda tetap bisa ikut langsung via browser HP/Laptop:\n\n'
+          '🔗 Tautan Majelis (Klik untuk Gabung):\n'
           '$link\n\n'
-          'Majlis Code: $code';
+          '🔢 Kode Majelis: $code\n'
+          '💡 Bisa dibuka langsung di Chrome / Safari / Edge tanpa perlu install aplikasi.';
+    } else {
+      final topicLine = (topic != null && topic.trim().isNotEmpty)
+          ? '📖 Topic: ${topic.trim()}\n'
+          : '';
+      return '✨ Invitation to Quran Majlis (ngabar) ✨\n\n'
+          '$topicLine'
+          '$scheduleLine'
+          'Join our Quran recitation circle! If you do not have the app installed, you can still join directly from any web browser:\n\n'
+          '🔗 Direct Majlis Link:\n'
+          '$link\n\n'
+          '🔢 Majlis Code: $code\n'
+          '💡 Open in Chrome / Safari / Edge without installing any app.';
     }
   }
 
