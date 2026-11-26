@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../audio/mistake_audio_service.dart';
 import '../core/app_state.dart';
 import 'iqro_audio_service.dart';
 import 'iqro_controller.dart';
+import 'iqro_mistake_sheet.dart';
 import 'iqro_picker_sheet.dart';
 import 'iqro_repository.dart';
 
@@ -51,6 +53,7 @@ class _IqroViewState extends State<IqroView> {
       listenable: Listenable.merge([
         IqroController.instance,
         app.iqroPositionNotifier,
+        MistakeAudioService.instance.revision,
       ]),
       builder: (context, _) {
         final ctrl = IqroController.instance;
@@ -104,31 +107,39 @@ class _IqroViewState extends State<IqroView> {
                                   .withValues(alpha: 0.35),
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "Iqro' $jilid  •  Hal $page/$totalPages",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  app.isArabic
+                                      ? 'اقرأ $jilid  •  ص $page/$totalPages'
+                                      : (app.isIndonesian
+                                          ? "Iqro' $jilid  •  Hal $page/$totalPages"
+                                          : "Iqro' $jilid  •  Pg $page/$totalPages"),
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? const Color(0xFF34D399)
+                                        : const Color(0xFF047857),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  size: 18,
                                   color: isDark
                                       ? const Color(0xFF34D399)
                                       : const Color(0xFF047857),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 18,
-                                color: isDark
-                                    ? const Color(0xFF34D399)
-                                    : const Color(0xFF047857),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -147,7 +158,9 @@ class _IqroViewState extends State<IqroView> {
                     // Reset page highlights
                     _HeaderIconBtn(
                       icon: Icons.refresh_rounded,
-                      tooltip: 'Reset Halaman',
+                      tooltip: app.isArabic
+                          ? 'إعادة ضبط الصفحة'
+                          : (app.isIndonesian ? 'Reset Halaman' : 'Reset Page'),
                       isDark: isDark,
                       c: c,
                       onTap: ctrl.resetPageProgress,
@@ -184,8 +197,16 @@ class _IqroViewState extends State<IqroView> {
                             Expanded(
                               child: Text(
                                 ctrl.lastHeardText.isEmpty
-                                    ? 'Mendengarkan bacaan Iqro\'...'
-                                    : 'Terdeteksi: ${ctrl.lastHeardText}',
+                                    ? (app.isArabic
+                                        ? 'جاري الاستماع لقراءة اقرأ...'
+                                        : (app.isIndonesian
+                                            ? "Mendengarkan bacaan Iqro'..."
+                                            : "Listening to Iqro' recitation..."))
+                                    : (app.isArabic
+                                        ? 'المسموع: ${ctrl.lastHeardText}'
+                                        : (app.isIndonesian
+                                            ? 'Terdeteksi: ${ctrl.lastHeardText}'
+                                            : 'Heard: ${ctrl.lastHeardText}')),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textDirection: ctrl.lastHeardText.isEmpty
@@ -201,6 +222,37 @@ class _IqroViewState extends State<IqroView> {
                                 ),
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (ctrl.isCurrentCellInQuran
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFF59E0B))
+                                    .withValues(alpha: isDark ? 0.22 : 0.14),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                ctrl.isCurrentCellInQuran
+                                    ? 'AI Qur\'an'
+                                    : 'AI Latihan',
+                                style: TextStyle(
+                                  fontFamily: 'cairo',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: ctrl.isCurrentCellInQuran
+                                      ? (isDark
+                                          ? const Color(0xFF34D399)
+                                          : const Color(0xFF047857))
+                                      : (isDark
+                                          ? const Color(0xFFFBBF24)
+                                          : const Color(0xFFB45309)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
                             Text(
                               '${ctrl.correctCount}/${pageData?.content.length ?? 0}',
                               style: TextStyle(
@@ -360,37 +412,135 @@ class _IqroViewState extends State<IqroView> {
             ),
           ),
 
+          if (ctrl.isPageCompleted) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981)
+                    .withValues(alpha: isDark ? 0.16 : 0.10),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.45),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF10B981),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      AppState.instance.isArabic
+                          ? 'أحسنت! اكتملت الصفحة'
+                          : (AppState.instance.isIndonesian
+                              ? 'Alhamdulillah, halaman selesai!'
+                              : 'Great! Page completed!'),
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? const Color(0xFF6EE7B7)
+                            : const Color(0xFF065F46),
+                      ),
+                    ),
+                  ),
+                  if (pageData.page < totalPages || pageData.jilid < 6)
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        if (pageData.page < totalPages) {
+                          ctrl.goToPage(pageData.jilid, pageData.page + 1);
+                        } else if (pageData.jilid < 6) {
+                          ctrl.goToPage(pageData.jilid + 1, 1);
+                        }
+                      },
+                      child: Text(
+                        pageData.page < totalPages
+                            ? (AppState.instance.isIndonesian
+                                ? 'Lanjut Hal ${pageData.page + 1}'
+                                : 'Next Pg ${pageData.page + 1}')
+                            : (AppState.instance.isIndonesian
+                                ? "Lanjut Iqro' ${pageData.jilid + 1}"
+                                : "Next Iqro' ${pageData.jilid + 1}"),
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 16),
 
           // Prev / Next Page Controls
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _PageNavButton(
-                icon: Icons.chevron_left_rounded,
-                label: 'Hal Sebelumnya',
-                enabled: pageData.page > 1,
-                c: c,
-                isDark: isDark,
-                onTap: () => ctrl.goToPage(pageData.jilid, pageData.page - 1),
-              ),
-              Text(
-                '${pageData.page} / $totalPages',
-                style: TextStyle(
-                  fontFamily: 'cairo',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: c.textSecondary,
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _PageNavButton(
+                    icon: Icons.chevron_left_rounded,
+                    label: AppState.instance.isArabic
+                        ? 'السابق'
+                        : (AppState.instance.isIndonesian
+                            ? 'Sebelumnya'
+                            : 'Previous'),
+                    enabled: pageData.page > 1,
+                    c: c,
+                    isDark: isDark,
+                    onTap: () => ctrl.goToPage(pageData.jilid, pageData.page - 1),
+                  ),
                 ),
               ),
-              _PageNavButton(
-                icon: Icons.chevron_right_rounded,
-                label: 'Hal Berikutnya',
-                iconRight: true,
-                enabled: pageData.page < totalPages,
-                c: c,
-                isDark: isDark,
-                onTap: () => ctrl.goToPage(pageData.jilid, pageData.page + 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  '${pageData.page} / $totalPages',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: c.textSecondary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: _PageNavButton(
+                    icon: Icons.chevron_right_rounded,
+                    label: AppState.instance.isArabic
+                        ? 'التالي'
+                        : (AppState.instance.isIndonesian
+                            ? 'Berikutnya'
+                            : 'Next'),
+                    iconRight: true,
+                    enabled: pageData.page < totalPages,
+                    c: c,
+                    isDark: isDark,
+                    onTap: () => ctrl.goToPage(pageData.jilid, pageData.page + 1),
+                  ),
+                ),
               ),
             ],
           ),
@@ -426,10 +576,31 @@ class _IqroViewState extends State<IqroView> {
       borderColor = const Color(0xFFF59E0B).withValues(alpha: 0.75);
     }
 
+    final hasMistakeClip = status == IqroCellStatus.mistake &&
+        ctrl.currentPageData != null &&
+        MistakeAudioService.instance.hasClip(
+          200 + ctrl.currentPageData!.jilid,
+          ctrl.currentPageData!.page,
+          cell.orderId.clamp(0, 255),
+        );
+
     return GestureDetector(
       onTap: () {
+        if (status == IqroCellStatus.mistake && ctrl.currentPageData != null) {
+          IqroMistakeSheet.show(
+            context,
+            jilid: ctrl.currentPageData!.jilid,
+            page: ctrl.currentPageData!.page,
+            cell: cell,
+            onRetryCell: () => ctrl.selectCell(flatIndex),
+          );
+          return;
+        }
         ctrl.selectCell(flatIndex);
-        IqroAudioService.instance.speakArabic(cell.arabic);
+        IqroAudioService.instance.speakArabic(
+          cell.arabic,
+          latinText: cell.latin,
+        );
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -446,6 +617,32 @@ class _IqroViewState extends State<IqroView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: (cell.inQuran
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFF64748B))
+                      .withValues(alpha: isDark ? 0.20 : 0.10),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  cell.inQuran ? "Qur'an" : 'Latihan',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: cell.inQuran
+                        ? (isDark
+                            ? const Color(0xFF34D399)
+                            : const Color(0xFF047857))
+                        : c.textSecondary,
+                  ),
+                ),
+              ),
+            ),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -473,6 +670,14 @@ class _IqroViewState extends State<IqroView> {
                   fontWeight: FontWeight.w600,
                   color: c.textSecondary,
                 ),
+              ),
+            ],
+            if (hasMistakeClip) ...[
+              const SizedBox(height: 2),
+              const Icon(
+                Icons.graphic_eq_rounded,
+                size: 13,
+                color: Color(0xFFEF4444),
               ),
             ],
           ],
@@ -613,17 +818,27 @@ class _PageNavButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!iconRight) Icon(icon, size: 18, color: c.text),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'cairo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: c.text,
+              if (!iconRight) ...[
+                Icon(icon, size: 18, color: c.text),
+                const SizedBox(width: 4),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: c.text,
+                  ),
                 ),
               ),
-              if (iconRight) Icon(icon, size: 18, color: c.text),
+              if (iconRight) ...[
+                const SizedBox(width: 4),
+                Icon(icon, size: 18, color: c.text),
+              ],
             ],
           ),
         ),

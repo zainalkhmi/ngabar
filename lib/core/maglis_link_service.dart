@@ -28,8 +28,8 @@ class MaglisLinkService {
   /// Whether a room code arrived before the app finished initialization
   bool get hasPendingRoomCode => _pendingRoomCode != null;
 
-  /// Builds short HTTPS share link: https://ngabar.vercel.app/48291
-  static String formatUrl(String code) => '$baseUrl/$code';
+  /// Builds short HTTPS share link: https://ngabar.vercel.app/?m=48291
+  static String formatUrl(String code) => '$baseUrl/?m=$code';
 
   /// Builds rich Zoom-style invitation message for any platform with schedule time support
   static String formatInviteText(

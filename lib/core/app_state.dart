@@ -350,6 +350,9 @@ class AppState extends ChangeNotifier {
   }
 
   void enterMaglisSession([int? mappedPage]) {
+    if (isIqroMode) {
+      setIqroMode(false);
+    }
     if (!isMushafMode) {
       wasInVerseListBeforeMaglis = true;
       if (mappedPage != null && QuranMetadata.isValidPage(mappedPage)) {
@@ -503,13 +506,34 @@ class AppState extends ChangeNotifier {
   }
 
   // ── Tracker Configuration ──────────────────────────────────────────────────
-  // Tajweed and Dictation modes use standard normal calibration with auto-reanchor enabled (stall threshold: 50).
-  TrackerConfig _trackerConfig = TrackerConfig.normal(
-    enableEarlyMatching: true,
-    enableAutoReanchor: true,
-    reanchorStallThreshold: 100,
-  );
+  // Default to Responsive (easy strictness + normal harakat speed) with fast
+  // reanchor stall threshold (26 phonemes) so AI Mushaf follows fluidly without
+  // getting stuck on dropped weak vowels or built-in phone mics.
+  MatchingStrictness aiStrictness = MatchingStrictness.easy;
+  TrackerConfig _trackerConfig = _buildTrackerConfig(MatchingStrictness.easy);
   TrackerConfig get trackerConfig => _trackerConfig;
+  late final ValueNotifier<TrackerConfig> trackerConfigNotifier =
+      ValueNotifier<TrackerConfig>(_trackerConfig);
+
+  static TrackerConfig _buildTrackerConfig(MatchingStrictness strictness) {
+    return TrackerConfig(
+      recitationSpeed: RecitationSpeed.normal,
+      matchingStrictness: strictness,
+      enableEarlyMatching: true,
+      enableAutoReanchor: true,
+      reanchorStallThreshold: strictness == MatchingStrictness.hard ? 30 : 26,
+    );
+  }
+
+  Future<void> setAiStrictness(MatchingStrictness strictness) async {
+    if (aiStrictness == strictness) return;
+    aiStrictness = strictness;
+    _trackerConfig = _buildTrackerConfig(strictness);
+    trackerConfigNotifier.value = _trackerConfig;
+    notifyListeners();
+    final prefs = await _getPrefs();
+    await prefs.setString('ai_strictness', strictness.name);
+  }
 
   // ── Verse Audio Playback (Backward-compatible reactive bridge to QuranAudioService) ──
   final ValueNotifier<int?> activeAudioAyah = ValueNotifier<int?>(null);
@@ -973,6 +997,13 @@ class AppState extends ChangeNotifier {
       if (prefs.containsKey('fontSize')) {
         fontSizeNotifier.value = prefs.getDouble('fontSize') ?? 28.0;
       }
+
+      final savedStrictness = prefs.getString('ai_strictness');
+      aiStrictness = savedStrictness != null
+          ? MatchingStrictness.fromName(savedStrictness)
+          : MatchingStrictness.easy;
+      _trackerConfig = _buildTrackerConfig(aiStrictness);
+      trackerConfigNotifier.value = _trackerConfig;
 
       themeNotifier.value = _theme;
       languageNotifier.value = _lang;

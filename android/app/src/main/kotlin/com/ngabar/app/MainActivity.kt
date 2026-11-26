@@ -9,6 +9,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.projection.MediaProjectionManager
@@ -20,6 +21,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.MediaStore
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
@@ -33,6 +36,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -42,12 +46,18 @@ class MainActivity : FlutterActivity() {
     private val MAGLIS_SERVICE_CHANNEL = "com.ngabar.app/maglis_service"
     private val LIFECYCLE_CHANNEL = "com.ngabar.app/audio_lifecycle"
     private val SCREEN_RECORD_CHANNEL = "com.ngabar.app/screen_record"
+    private val IQRO_TTS_CHANNEL = "com.ngabar.app/iqro_tts"
 
     companion object {
         private const val REQ_SCREEN_RECORD = 9401
     }
 
     private var screenRecordChannel: MethodChannel? = null
+    private var iqroTtsChannel: MethodChannel? = null
+    private var iqroTts: TextToSpeech? = null
+    private var iqroTtsReady: Boolean = false
+    private var iqroTtsInitializing: Boolean = false
+    private val pendingTtsCallbacks = mutableListOf<(Boolean) -> Unit>()
     private var pendingScreenRecordResult: MethodChannel.Result? = null
     private var pendingOutputPath: String = ""
     private var pendingRtmpUrl: String = ""
@@ -68,6 +78,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         super.onCreate(savedInstanceState)
         // Keep screen awake continuously while app is in foreground (Standard Android Window Flag)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -93,6 +104,14 @@ class MainActivity : FlutterActivity() {
             unregisterReceiver(screenReceiver)
         } catch (_: Exception) {}
         ScreenRecordService.onStateChanged = null
+        try {
+            iqroTts?.stop()
+            iqroTts?.shutdown()
+        } catch (_: Throwable) {}
+        iqroTts = null
+        iqroTtsReady = false
+        iqroTtsInitializing = false
+        pendingTtsCallbacks.clear()
         if (isFinishing && ScreenRecordService.isCurrentlyRecording) {
             try {
                 val stopIntent = Intent(this, ScreenRecordService::class.java).apply {
@@ -334,6 +353,156 @@ class MainActivity : FlutterActivity() {
                     }.start()
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        val ttsChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, IQRO_TTS_CHANNEL)
+        iqroTtsChannel = ttsChannel
+        ttsChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "speak" -> {
+                    val text = call.argument<String>("text") ?: ""
+                    val utteranceId = call.argument<String>("utteranceId") ?: "iqro_tts"
+                    val rate = (call.argument<Double>("rate") ?: 0.8).toFloat()
+                    if (text.isBlank()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    ensureIqroTtsReady { available ->
+                        if (!available) {
+                            result.success(false)
+                            return@ensureIqroTtsReady
+                        }
+                        try {
+                            val tts = iqroTts ?: run {
+                                result.success(false)
+                                return@ensureIqroTtsReady
+                            }
+                            tts.setSpeechRate(rate)
+                            tts.setPitch(1.0f)
+                            val params = Bundle()
+                            val status = tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+                            result.success(status == TextToSpeech.SUCCESS)
+                        } catch (_: Throwable) {
+                            result.success(false)
+                        }
+                    }
+                }
+                "stop" -> {
+                    try {
+                        iqroTts?.stop()
+                    } catch (_: Throwable) {}
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun ensureIqroTtsReady(callback: (Boolean) -> Unit) {
+        if (iqroTtsReady && iqroTts != null) {
+            callback(true)
+            return
+        }
+        pendingTtsCallbacks.add(callback)
+        if (iqroTtsInitializing) return
+
+        iqroTtsInitializing = true
+        try {
+            var engine: TextToSpeech? = null
+            engine = TextToSpeech(applicationContext) { status ->
+                Handler(Looper.getMainLooper()).post {
+                    val ttsEngine = engine
+                    iqroTtsInitializing = false
+                    var ok = false
+                    if (status == TextToSpeech.SUCCESS && ttsEngine != null) {
+                        try {
+                            val idLocale = Locale("id", "ID")
+                            var langRes = ttsEngine.setLanguage(idLocale)
+                            if (langRes == TextToSpeech.LANG_MISSING_DATA ||
+                                langRes == TextToSpeech.LANG_NOT_SUPPORTED
+                            ) {
+                                langRes = ttsEngine.setLanguage(Locale("in", "ID"))
+                            }
+                            ok = langRes != TextToSpeech.LANG_MISSING_DATA &&
+                                langRes != TextToSpeech.LANG_NOT_SUPPORTED
+                            if (ok) {
+                                ttsEngine.setAudioAttributes(
+                                    android.media.AudioAttributes.Builder()
+                                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                        .build()
+                                )
+                                ttsEngine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                                    override fun onStart(utteranceId: String?) {}
+                                    override fun onDone(utteranceId: String?) {
+                                        runOnUiThread {
+                                            iqroTtsChannel?.invokeMethod(
+                                                "onTtsFinished",
+                                                mapOf("utteranceId" to (utteranceId ?: ""))
+                                            )
+                                        }
+                                    }
+
+                                    @Deprecated("Deprecated in Java")
+                                    override fun onError(utteranceId: String?) {
+                                        runOnUiThread {
+                                            iqroTtsChannel?.invokeMethod(
+                                                "onTtsFinished",
+                                                mapOf("utteranceId" to (utteranceId ?: ""))
+                                            )
+                                        }
+                                    }
+
+                                    override fun onError(utteranceId: String?, errorCode: Int) {
+                                        runOnUiThread {
+                                            iqroTtsChannel?.invokeMethod(
+                                                "onTtsFinished",
+                                                mapOf("utteranceId" to (utteranceId ?: ""))
+                                            )
+                                        }
+                                    }
+
+                                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                                        runOnUiThread {
+                                            iqroTtsChannel?.invokeMethod(
+                                                "onTtsFinished",
+                                                mapOf("utteranceId" to (utteranceId ?: ""))
+                                            )
+                                        }
+                                    }
+                                })
+                                iqroTts = ttsEngine
+                                iqroTtsReady = true
+                            } else {
+                                ttsEngine.shutdown()
+                                iqroTts = null
+                                iqroTtsReady = false
+                            }
+                        } catch (_: Throwable) {
+                            iqroTts = null
+                            iqroTtsReady = false
+                            ok = false
+                        }
+                    } else {
+                        iqroTts = null
+                        iqroTtsReady = false
+                    }
+
+                    val callbacks = pendingTtsCallbacks.toList()
+                    pendingTtsCallbacks.clear()
+                    for (cb in callbacks) {
+                        cb(ok)
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            iqroTtsInitializing = false
+            iqroTtsReady = false
+            val callbacks = pendingTtsCallbacks.toList()
+            pendingTtsCallbacks.clear()
+            for (cb in callbacks) {
+                cb(false)
             }
         }
     }

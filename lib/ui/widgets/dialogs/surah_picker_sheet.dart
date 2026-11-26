@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
 import '../../../maglis/maglis_controller.dart';
+import '../../../iqro/iqro_picker_sheet.dart';
 import 'dialog_base.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -278,7 +279,7 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
         children: [
           if (!MaglisController.instance.inSession) ...[
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
               child: AppSegmentedPillSelector(
                 icons: const [
                   Icons.format_list_bulleted_rounded,
@@ -296,6 +297,111 @@ class _SurahPickerSheetState extends State<SurahPickerSheet> {
                     setState(() {});
                   }
                 },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    IqroPickerSheet.show(context);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981)
+                          .withValues(alpha: isDark ? 0.14 : 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF10B981)
+                            .withValues(alpha: isDark ? 0.35 : 0.22),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: isDark ? 0.26 : 0.16),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.auto_stories_rounded,
+                            size: 16,
+                            color: Color(0xFF10B981),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    app.isIndonesian
+                                        ? "Buku Iqro' (Jilid 1–6)"
+                                        : "Iqro' Books (1–6)",
+                                    style: TextStyle(
+                                      fontFamily: 'cairo',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? const Color(0xFF34D399)
+                                          : const Color(0xFF047857),
+                                    ),
+                                  ),
+                                  if (app.isIqroMode) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'AKTIF',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text(
+                                app.isIndonesian
+                                    ? 'Belajar huruf Hijaiyah interaktif dengan pengenalan suara AI'
+                                    : 'Interactive Hijaiyah learning with AI voice recognition',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: c.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 12,
+                          color: Color(0xFF10B981),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

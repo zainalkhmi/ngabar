@@ -8,6 +8,8 @@ import '../../core/maglis_link_service.dart';
 import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 import '../../audio/screen_recording_service.dart';
+import '../../iqro/iqro_audio_service.dart';
+import '../../iqro/iqro_picker_sheet.dart';
 import 'dialogs/live_stream_sheet.dart';
 
 enum MicBarMode { recording, maglis, maglisRecording, normal }
@@ -111,10 +113,11 @@ class BottomActionBar extends StatelessWidget {
 
             const double protrusion = 4.0;
             final double recHeight = dockHeight + (protrusion * 2.0);
-            final double micWidth = isNarrow ? 58.0 : 62.0;
+            final double micWidth = isNarrow ? 56.0 : 62.0;
 
-            final double stdBtnWidth = isNarrow ? 34.0 : 37.0;
-            final double gap = isNarrow ? 4.0 : 5.0;
+            final double stdBtnWidth =
+                isNarrow ? 30.0 : (maxW < 400.0 ? 33.5 : 37.0);
+            final double gap = isNarrow ? 2.5 : (maxW < 400.0 ? 3.5 : 5.0);
             final double maglisGap = isNarrow ? 6.0 : 8.0;
 
             final int recBtnCount = onScreenRecordTap != null ? 3 : 2;
@@ -139,8 +142,12 @@ class BottomActionBar extends StatelessWidget {
                     ? maglisRightMargin
                     : normalRightMargin;
 
+            final int normalBtnCount = 2 +
+                (onIqroTap != null ? 1 : 0) +
+                (onVoiceSearchTap != null ? 1 : 0) +
+                (onPlayReciteTap != null ? 1 : 0);
             final double minNormalActionWidth =
-                (stdBtnWidth * 3.0) + (gap * 3.0) + 68.0;
+                (stdBtnWidth * normalBtnCount) + (gap * normalBtnCount) + 72.0;
             const double minMaglisActionWidth = 220.0;
 
             final Color pillBg =
@@ -678,13 +685,18 @@ class BottomActionBar extends StatelessWidget {
                                             if (onPlayReciteTap != null) ...[
                                               SizedBox(width: gap),
                                               ListenableBuilder(
-                                                listenable: QuranAudioService
-                                                    .instance.isPlayingNotifier,
+                                                listenable: Listenable.merge([
+                                                  QuranAudioService
+                                                      .instance.isPlayingNotifier,
+                                                  IqroAudioService
+                                                      .instance.isPlayingNotifier,
+                                                ]),
                                                 builder: (context, _) {
-                                                  final isPlaying =
-                                                      QuranAudioService.instance
-                                                          .isPlayingNotifier
-                                                          .value;
+                                                  final isPlaying = isIqroMode
+                                                      ? IqroAudioService.instance
+                                                          .isPlayingNotifier.value
+                                                      : QuranAudioService.instance
+                                                          .isPlayingNotifier.value;
                                                   return _buildActionButton(
                                                     child: Icon(
                                                       isPlaying
@@ -697,9 +709,13 @@ class BottomActionBar extends StatelessWidget {
                                                               0xFF10B981)
                                                           : _btnFg(isDark),
                                                     ),
-                                                    tooltip: isPlaying
-                                                        ? 'Jeda Murottal'
-                                                        : 'Putar Murottal',
+                                                    tooltip: isIqroMode
+                                                        ? (isPlaying
+                                                            ? 'Hentikan Audio Iqro'
+                                                            : 'Putar Lafal Iqro')
+                                                        : (isPlaying
+                                                            ? 'Jeda Murottal'
+                                                            : 'Putar Murottal'),
                                                     isActive: isPlaying,
                                                     isDark: isDark,
                                                     borderlessWhenInactive:
@@ -1045,6 +1061,23 @@ class BottomActionBar extends StatelessWidget {
                       onTap: () {
                         Navigator.of(sheetCtx).pop();
                         onSurahTap();
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildToolsTile(
+                      icon: Icons.auto_stories_rounded,
+                      title: isId
+                          ? "Buka Belajar Iqro' (Jilid 1–6)"
+                          : (isAr ? 'فتح تعلم اقرأ (١-٦)' : "Open Iqro' (1–6)"),
+                      subtitle: isId
+                          ? 'Belajar huruf Hijaiyah interaktif dengan pengenalan suara AI'
+                          : 'Learn Hijaiyah letters with AI voice matching',
+                      isDark: isDark,
+                      textCol: textCol,
+                      subCol: subCol,
+                      onTap: () {
+                        Navigator.of(sheetCtx).pop();
+                        IqroPickerSheet.show(context);
                       },
                     ),
                     const SizedBox(height: 8),
@@ -1408,6 +1441,9 @@ class BottomActionBar extends StatelessWidget {
     required double dockHeight,
   }) {
     final Color fgColor = _btnFg(isDark);
+    final Color effectiveFg = isIqroMode
+        ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+        : fgColor;
 
     return _TapScale(
       onTap: onSurahTap,
@@ -1416,21 +1452,38 @@ class BottomActionBar extends StatelessWidget {
         child: Center(
           child: Container(
             height: height,
-            padding: EdgeInsets.symmetric(horizontal: isNarrow ? 9.0 : 12.0),
+            padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8.0 : 11.0),
             decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.045),
+              color: isIqroMode
+                  ? const Color(0xFF10B981)
+                      .withValues(alpha: isDark ? 0.16 : 0.10)
+                  : (isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.045)),
               borderRadius: BorderRadius.circular(14.0),
+              border: isIqroMode
+                  ? Border.all(
+                      color: const Color(0xFF10B981)
+                          .withValues(alpha: isDark ? 0.45 : 0.35),
+                      width: 1.0,
+                    )
+                  : null,
             ),
             child: Row(
               children: [
-                _EmptyMushafIcon(
-                  size: isNarrow ? 16.0 : 17.0,
-                  color: isDark
-                      ? const Color(0xFF94A3B8)
-                      : const Color(0xFF64748B),
-                ),
+                if (isIqroMode)
+                  Icon(
+                    Icons.auto_stories_rounded,
+                    size: isNarrow ? 15.5 : 16.5,
+                    color: const Color(0xFF10B981),
+                  )
+                else
+                  _EmptyMushafIcon(
+                    size: isNarrow ? 16.0 : 17.0,
+                    color: isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF64748B),
+                  ),
                 SizedBox(width: isNarrow ? 5.0 : 7.0),
                 Expanded(
                   child: Text(
@@ -1440,17 +1493,19 @@ class BottomActionBar extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'cairo',
-                      color: fgColor,
-                      fontSize: isNarrow ? 12.5 : (isAr ? 13.5 : 13.0),
+                      color: effectiveFg,
+                      fontSize: isNarrow ? 12.0 : (isAr ? 13.5 : 13.0),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  color: isDark
-                      ? const Color(0xFF94A3B8)
-                      : const Color(0xFF64748B),
+                  color: isIqroMode
+                      ? const Color(0xFF10B981)
+                      : (isDark
+                          ? const Color(0xFF94A3B8)
+                          : const Color(0xFF64748B)),
                   size: isNarrow ? 16.0 : 17.5,
                 ),
               ],

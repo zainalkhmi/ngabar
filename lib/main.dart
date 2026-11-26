@@ -33,6 +33,7 @@ import 'core/highlighting_controller.dart';
 import 'ui/tracking_screen.dart';
 import 'mushaf/mushaf_view.dart';
 import 'maglis/maglis_controller.dart';
+import 'iqro/iqro_audio_service.dart';
 import 'iqro/iqro_controller.dart';
 import 'maglis/maglis_core.dart';
 import 'core/maglis_link_service.dart';
@@ -103,6 +104,10 @@ void main() async {
       }
 
       if (!PlatformCapabilities.isWeb) {
+        // Lock app strictly to Portrait orientation regardless of device sensor
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+        ]);
         // Transparent system bars for immersive experience
         SystemChrome.setSystemUIOverlayStyle(
           const SystemUiOverlayStyle(
@@ -313,7 +318,9 @@ class _OrchestratorState extends State<_Orchestrator>
   bool _hasAttachedMaglisBroadcast = false;
 
   // ── Recitation Stuck Watchdog (zero-AI-overhead vocal + cursor monitor) ──
-  static const int _stuckVoicedThresholdMs = 4200;
+  // Silent auto-recovery in HighlightingController engages at ~2.2s, so 5.5s
+  // gives two quiet self-heal opportunities before surfacing the helper banner.
+  static const int _stuckVoicedThresholdMs = 5500;
   static const int _stuckCooldownMs = 22000;
   int _lastProgressSurah = 0;
   int _lastProgressAyah = 0;
@@ -424,10 +431,16 @@ class _OrchestratorState extends State<_Orchestrator>
     _transcriptionSub?.cancel();
     _transcriptionSub = _engine.transcriptionStream.listen((res) {
       if (AppState.instance.isIqroMode && _isRecording && mounted) {
+        final int prevCorrect = IqroController.instance.correctCount;
         IqroController.instance.onTranscription(
           res.text,
           isFinal: res.isFinal,
         );
+        if (IqroController.instance.correctCount != prevCorrect) {
+          _voicedStallMs = 0;
+          _lastProgressEpochMs = DateTime.now().millisecondsSinceEpoch;
+          AppState.instance.dismissRecitationStuckBanner();
+        }
         return;
       }
       if (_isVoiceSearching && !_isVoiceSearchPaused && mounted) {
@@ -496,6 +509,8 @@ class _OrchestratorState extends State<_Orchestrator>
     QuranAudioService.instance.onPlayingChanged = _onVerseAudioPlayingChanged;
     MistakeAudioService.instance.isPlayingNotifier
         .addListener(_onMistakePlaybackChanged);
+    IqroAudioService.instance.isPlayingNotifier
+        .addListener(_onIqroPlaybackChanged);
     MaglisController.instance.sessionListenable
         .addListener(_onMaglisSessionChangedForIdleTimer);
     MaglisController.instance.sessionListenable
@@ -749,13 +764,22 @@ class _OrchestratorState extends State<_Orchestrator>
     MistakeAudioService.instance.isPlayingNotifier
         .removeListener(_onMistakePlaybackChanged);
     MistakeAudioService.instance.stopPlayback();
+    IqroAudioService.instance.isPlayingNotifier
+        .removeListener(_onIqroPlaybackChanged);
+    IqroAudioService.instance.stop();
     _transcriptionSub?.cancel();
+    AppState.instance.trackerConfigNotifier
+        .removeListener(_onTrackerConfigChanged);
     _ctrl?.removeListener(_onControllerProgressTick);
     _ctrl?.activeAyah.removeListener(_onControllerProgressTick);
     _audio.dispose();
     _ctrl?.dispose();
     _voiceSearchAsrNotifier.dispose();
     super.dispose();
+  }
+
+  void _onTrackerConfigChanged() {
+    _ctrl?.updateConfig(AppState.instance.trackerConfigNotifier.value);
   }
 
   /// Sequential initialization pipeline in the background.
@@ -801,6 +825,8 @@ class _OrchestratorState extends State<_Orchestrator>
       _syncMaglisBroadcastListeners();
       _ctrl!.addListener(_onControllerProgressTick);
       _ctrl!.activeAyah.addListener(_onControllerProgressTick);
+      AppState.instance.trackerConfigNotifier
+          .addListener(_onTrackerConfigChanged);
       await _ctrl!.setTargetSurah(initialSurah);
       _ctrl!.setManualAyah(initialSurah, initialAyah);
 
@@ -991,6 +1017,7 @@ class _OrchestratorState extends State<_Orchestrator>
           // so the AI model never hears the phone speaker or accepts input!
           if (QuranAudioService.instance.isPlaying ||
               MistakeAudioService.instance.isPlaying ||
+              IqroAudioService.instance.isPlaying ||
               !_isRecording) {
             return;
           }
@@ -1031,7 +1058,8 @@ class _OrchestratorState extends State<_Orchestrator>
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _audio.stop().catchError((_) {});
         }
-      } else if (!MistakeAudioService.instance.isPlaying) {
+      } else if (!MistakeAudioService.instance.isPlaying &&
+          !IqroAudioService.instance.isPlaying) {
         // Verse audio has stopped:
         _audio.clearBuffer();
         _engine.resetBuffer();
@@ -1050,7 +1078,26 @@ class _OrchestratorState extends State<_Orchestrator>
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _audio.stop().catchError((_) {});
         }
-      } else if (!QuranAudioService.instance.isPlaying) {
+      } else if (!QuranAudioService.instance.isPlaying &&
+          !IqroAudioService.instance.isPlaying) {
+        _audio.clearBuffer();
+        _engine.resetBuffer();
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          _startAudioRecordingStream();
+        }
+      }
+    }
+  }
+
+  void _onIqroPlaybackChanged() {
+    final bool isPlayingIqro = IqroAudioService.instance.isPlaying;
+    if (_isRecording) {
+      if (isPlayingIqro) {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          _audio.stop().catchError((_) {});
+        }
+      } else if (!QuranAudioService.instance.isPlaying &&
+          !MistakeAudioService.instance.isPlaying) {
         _audio.clearBuffer();
         _engine.resetBuffer();
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
@@ -1112,12 +1159,14 @@ class _OrchestratorState extends State<_Orchestrator>
         }
 
         QuranAudioService.instance.stop();
+        IqroAudioService.instance.stop();
         _engine.resetBuffer();
 
         if (AppState.instance.isIqroMode) {
           IqroController.instance.resetSessionBuffer();
           if (mounted) setState(() => _isRecording = true);
           _resetStuckWatchdog();
+          MistakeAudioService.instance.resetRingBuffer();
           await _startAudioRecordingStream();
           return;
         }

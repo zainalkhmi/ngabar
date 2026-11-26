@@ -18,6 +18,8 @@ import 'widgets/mic_bar.dart';
 import '../mushaf/mushaf_view.dart';
 import '../verse_list/verse_list_view.dart';
 import '../maglis/maglis_controller.dart';
+import '../iqro/iqro_audio_service.dart';
+import '../iqro/iqro_controller.dart';
 import '../iqro/iqro_view.dart';
 import '../iqro/iqro_picker_sheet.dart';
 
@@ -404,34 +406,42 @@ class _TrackingScreenState extends State<TrackingScreen>
       builder: (context, child) {
         final c = app.colors;
 
-        return Directionality(
-          textDirection: app.isArabic ? TextDirection.rtl : TextDirection.ltr,
-          child: Scaffold(
-            resizeToAvoidBottomInset: false,
-            backgroundColor: c.bg,
-            body: ValueListenableBuilder<bool>(
-              valueListenable: _isAutoScrolling,
-              child: Positioned.fill(child: _buildVerseContent(c, app)),
-              builder: (context, isAutoScrolling, verseContentChild) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Main Verse Content (Mushaf View or Verse List View - preserved across auto-scroll toggles)
-                    if (verseContentChild != null) verseContentChild,
+        return PopScope(
+          canPop: !app.isIqroMode,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && app.isIqroMode) {
+              IqroAudioService.instance.stop();
+              app.setIqroMode(false);
+            }
+          },
+          child: Directionality(
+            textDirection: app.isArabic ? TextDirection.rtl : TextDirection.ltr,
+            child: Scaffold(
+              resizeToAvoidBottomInset: false,
+              backgroundColor: c.bg,
+              body: ValueListenableBuilder<bool>(
+                valueListenable: _isAutoScrolling,
+                child: Positioned.fill(child: _buildVerseContent(c, app)),
+                builder: (context, isAutoScrolling, verseContentChild) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Main Verse Content (Mushaf View or Verse List View - preserved across auto-scroll toggles)
+                      if (verseContentChild != null) verseContentChild,
 
-                    // Bottom Action Bar (Unified Glassmorphic Command Dock)
-                    // Disappears during auto-scroll for zero-distraction teleprompter reading!
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOutCubic,
-                      bottom: (!app.isMushafMode && isAutoScrolling) ? -90.0 : 0,
-                      left: 0,
-                      right: 0,
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 220),
-                        opacity: (!app.isMushafMode && isAutoScrolling) ? 0.0 : 1.0,
-                        child: IgnorePointer(
-                          ignoring: !app.isMushafMode && isAutoScrolling,
+                      // Bottom Action Bar (Unified Glassmorphic Command Dock)
+                      // Disappears during auto-scroll for zero-distraction teleprompter reading!
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        bottom: (!app.isIqroMode && !app.isMushafMode && isAutoScrolling) ? -90.0 : 0,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 220),
+                          opacity: (!app.isIqroMode && !app.isMushafMode && isAutoScrolling) ? 0.0 : 1.0,
+                          child: IgnorePointer(
+                            ignoring: !app.isIqroMode && !app.isMushafMode && isAutoScrolling,
                           child: AnimatedBuilder(
                             animation: _bottomBarListenable,
                             builder: (context, _) {
@@ -513,6 +523,26 @@ class _TrackingScreenState extends State<TrackingScreen>
                                   );
                                 },
                                 onPlayReciteTap: () async {
+                                  if (app.isIqroMode) {
+                                    final iqroAudio = IqroAudioService.instance;
+                                    if (iqroAudio.isPlaying) {
+                                      await iqroAudio.stop();
+                                      return;
+                                    }
+                                    final page =
+                                        IqroController.instance.currentPageData;
+                                    if (page != null && page.content.isNotEmpty) {
+                                      final idx = IqroController
+                                          .instance.activeIndex
+                                          .clamp(0, page.content.length - 1);
+                                      final cell = page.content[idx];
+                                      await iqroAudio.speakArabic(
+                                        cell.arabic,
+                                        latinText: cell.latin,
+                                      );
+                                    }
+                                    return;
+                                  }
                                   final player = QuranAudioService.instance;
                                   if (player.isPlayingNotifier.value) {
                                     await player.pause();
@@ -566,7 +596,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                     ),
 
                     // Auto-Scroll / Pause button in Verse List mode (occupies the exact spot as Page Number in Mushaf layout)
-                    if (!app.isMushafMode && !widget.isRecording && !widget.isVoiceSearching)
+                    if (!app.isIqroMode && !app.isMushafMode && !widget.isRecording && !widget.isVoiceSearching)
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 280),
                         curve: Curves.easeOutCubic,
@@ -601,6 +631,7 @@ class _TrackingScreenState extends State<TrackingScreen>
               },
             ),
           ),
+        ),
         );
       },
     );

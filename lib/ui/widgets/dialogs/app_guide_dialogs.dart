@@ -332,6 +332,19 @@ class _AppGuideDialogState extends State<AppGuideDialog> {
                       : 'Record & share to YouTube, TikTok & Facebook, or go Live via RTMP using the AI-safe light encoder.'),
               c: c,
             ),
+            _buildRow(
+              icon: Icons.auto_stories_rounded,
+              iconColor: const Color(0xFF10B981),
+              title: isId
+                  ? "Belajar Buku Iqro' (Jilid 1–6)"
+                  : (isAr ? 'تعلم اقرأ (١-٦) بالذكاء الاصطناعي' : "Learn Iqro' (1–6) with AI"),
+              text: isId
+                  ? 'Buka dari daftar Surah, Pengaturan, atau tombol IQRO di dock bawah. Pilih Jilid 1 s/d 6 untuk belajar huruf Hijaiyah interaktif: tekan mic untuk menyimak suara (hijau saat benar, merah saat salah), atau ketuk kotak huruf untuk mendengarkan audio pelafalan asli secara offline.'
+                  : (isAr
+                      ? 'متاح من قائمة السور أو الإعدادات أو شريط الأوامر. اختر الأجزاء ١ إلى ٦ لتعلم الحروف الهجائية: اضغط الميكروفون للتقييم الفوري بالذكاء الاصطناعي، أو اضغط المربع لسماع النطق الصوتي الصحيح.'
+                      : 'Accessible from Surah list, Settings, or bottom dock IQRO button. Choose volumes 1 to 6 to practice Hijaiyah syllables interactively with realtime AI voice feedback (green for correct, red for mistake) and tap-to-speak offline pronunciations.'),
+              c: c,
+            ),
           ],
         ),
       ],

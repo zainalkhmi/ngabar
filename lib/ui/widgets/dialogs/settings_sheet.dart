@@ -345,6 +345,102 @@ class SettingsSheet extends StatelessWidget {
                       ),
                       SettingDivider(c: c),
 
+                      // 2a. Sensitivitas AI Mushaf
+                      ListenableBuilder(
+                        listenable: app.trackerConfigNotifier,
+                        builder: (context, _) {
+                          final strictness = app.aiStrictness;
+                          final int idx = switch (strictness) {
+                            MatchingStrictness.easy => 0,
+                            MatchingStrictness.normal => 1,
+                            MatchingStrictness.hard => 2,
+                          };
+                          return SettingTile(
+                            icon: Icons.graphic_eq_rounded,
+                            title: isId
+                                ? 'Sensitivitas AI Mushaf'
+                                : 'AI Voice Sensitivity',
+                            c: c,
+                            bottom: AppSegmentedPillSelector(
+                              labels: isId
+                                  ? const ['Responsif', 'Seimbang', 'Ketat']
+                                  : const ['Responsive', 'Balanced', 'Strict'],
+                              selected: idx,
+                              c: c,
+                              height: 36,
+                              onSelected: (i) {
+                                final next = switch (i) {
+                                  0 => MatchingStrictness.easy,
+                                  1 => MatchingStrictness.normal,
+                                  _ => MatchingStrictness.hard,
+                                };
+                                app.setAiStrictness(next);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      SettingDivider(c: c),
+
+                      // 2b. Mode Belajar Iqro' (Jilid 1-6)
+                      ListenableBuilder(
+                        listenable: Listenable.merge([
+                          app.iqroModeNotifier,
+                          app.iqroPositionNotifier,
+                        ]),
+                        builder: (context, _) {
+                          final isIqro = app.isIqroMode;
+                          final jilid = app.iqroJilid;
+                          final page = app.iqroPage;
+                          return SettingTile(
+                            icon: Icons.auto_stories_rounded,
+                            title: isId
+                                ? "Mode Belajar Iqro' (1–6)"
+                                : "Iqro' Learning Mode (1–6)",
+                            c: c,
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: isDark ? 0.20 : 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: isDark ? 0.40 : 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isIqro
+                                        ? "Iqro' $jilid • Hal $page"
+                                        : (isId ? 'Buka Iqro' : 'Open Iqro'),
+                                    style: const TextStyle(
+                                      color: Color(0xFF10B981),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 10.5,
+                                    color: Color(0xFF10B981),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              DialogService.showIqroPicker(context);
+                            },
+                          );
+                        },
+                      ),
+                      SettingDivider(c: c),
+
                       // 3. Offline Audio & Timing Download
                       QuranDownloadTile(c: c, isAr: isAr, isDark: isDark),
 

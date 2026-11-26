@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../audio/camcorder_sound_helper.dart';
+import '../audio/mistake_audio_service.dart';
 import '../core/app_state.dart';
 import 'iqro_repository.dart';
 
@@ -33,8 +34,9 @@ class IqroController extends ChangeNotifier {
   String _lastHeardText = '';
   String get lastHeardText => _lastHeardText;
 
-  // Tracks what ASR text was already consumed for previous cells in the same utterance
+  // Tracks ASR text already consumed for previous cells in the same utterance
   String _consumedNormalizedBuffer = '';
+  int _consumedCompactLen = 0;
   int _lastMistakeOrderId = -1;
   Timer? _mistakeDebounceTimer;
 
@@ -46,6 +48,23 @@ class IqroController extends ChangeNotifier {
   int get mistakeCount =>
       _statuses.values.where((v) => v == IqroCellStatus.mistake).length;
 
+  /// True when the active cell's words exist in the Al-Qur'an vocabulary,
+  /// selecting strict Quran-ASR matching; false selects phonetic practice matching.
+  bool get isCurrentCellInQuran {
+    final data = _currentPageData;
+    if (data == null ||
+        _activeIndex < 0 ||
+        _activeIndex >= data.content.length) {
+      return false;
+    }
+    return data.content[_activeIndex].inQuran;
+  }
+
+  bool get isPageCompleted =>
+      _currentPageData != null &&
+      _currentPageData!.content.isNotEmpty &&
+      _activeIndex >= _currentPageData!.content.length;
+
   Future<void> loadPage(int jilid, int page) async {
     _isLoading = true;
     notifyListeners();
@@ -55,6 +74,7 @@ class IqroController extends ChangeNotifier {
     _statuses.clear();
     _lastHeardText = '';
     _consumedNormalizedBuffer = '';
+    _consumedCompactLen = 0;
     _lastMistakeOrderId = -1;
     _isLoading = false;
     notifyListeners();
@@ -75,6 +95,7 @@ class IqroController extends ChangeNotifier {
     _activeIndex = 0;
     _lastHeardText = '';
     _consumedNormalizedBuffer = '';
+    _consumedCompactLen = 0;
     _lastMistakeOrderId = -1;
     notifyListeners();
   }
@@ -82,6 +103,7 @@ class IqroController extends ChangeNotifier {
   void resetSessionBuffer() {
     _lastHeardText = '';
     _consumedNormalizedBuffer = '';
+    _consumedCompactLen = 0;
     _mistakeDebounceTimer?.cancel();
   }
 
@@ -89,7 +111,13 @@ class IqroController extends ChangeNotifier {
   void onTranscription(String rawText, {required bool isFinal}) {
     final data = _currentPageData;
     if (data == null || data.content.isEmpty) return;
-    if (_activeIndex >= data.content.length) return;
+    if (_activeIndex >= data.content.length) {
+      if (isFinal) {
+        _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
+      }
+      return;
+    }
 
     final trimmed = rawText.trim();
     if (trimmed.isNotEmpty) {
@@ -98,38 +126,73 @@ class IqroController extends ChangeNotifier {
 
     final normSpokenFull = _normalizeArabic(trimmed);
     if (normSpokenFull.isEmpty) {
-      if (isFinal) _consumedNormalizedBuffer = '';
+      if (isFinal) {
+        _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
+      }
       notifyListeners();
       return;
     }
 
-    // Extract only the newly spoken portion after what already matched earlier cells
-    String normDelta = normSpokenFull;
+    final fullCompact = normSpokenFull.replaceAll(' ', '');
+
+    // Extract only the newly spoken portion after what already matched earlier cells,
+    // staying resilient even if streaming ASR alters spaces in partial transcripts.
+    String deltaCompact = fullCompact;
     if (_consumedNormalizedBuffer.isNotEmpty &&
         normSpokenFull.startsWith(_consumedNormalizedBuffer)) {
-      normDelta = normSpokenFull.substring(_consumedNormalizedBuffer.length).trim();
+      deltaCompact = normSpokenFull
+          .substring(_consumedNormalizedBuffer.length)
+          .replaceAll(' ', '');
+    } else if (_consumedCompactLen > 0 &&
+        _consumedCompactLen <= fullCompact.length) {
+      deltaCompact = fullCompact.substring(_consumedCompactLen);
     }
 
-    if (normDelta.isEmpty) {
-      if (isFinal) _consumedNormalizedBuffer = '';
+    if (deltaCompact.isEmpty) {
+      if (isFinal) {
+        _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
+      }
       notifyListeners();
       return;
     }
 
-    final targetCell = data.content[_activeIndex];
-    final normTarget = _normalizeArabic(targetCell.arabic);
+    // Advance sequentially across 1+ cells if the user recited multiple syllables
+    // in a single breath/chunk.
+    bool matchedAny = false;
+    while (_activeIndex < data.content.length && deltaCompact.isNotEmpty) {
+      final targetCell = data.content[_activeIndex];
+      final targetCompact =
+          _normalizeArabic(targetCell.arabic).replaceAll(' ', '');
+      if (targetCompact.isEmpty) {
+        _activeIndex++;
+        continue;
+      }
 
-    if (_isMatch(normDelta, normTarget)) {
+      final int consumedChars = _matchPrefixLen(
+        deltaCompact,
+        targetCompact,
+        inQuran: targetCell.inQuran,
+      );
+      if (consumedChars <= 0) break;
+
+      matchedAny = true;
       _mistakeDebounceTimer?.cancel();
       _statuses[targetCell.orderId] = IqroCellStatus.correct;
-      _consumedNormalizedBuffer = normSpokenFull;
       _lastMistakeOrderId = -1;
-      if (_activeIndex + 1 < data.content.length) {
-        _activeIndex++;
-      }
+      _activeIndex++;
+
+      deltaCompact = deltaCompact.substring(consumedChars);
+      _consumedCompactLen = fullCompact.length - deltaCompact.length;
+      _consumedNormalizedBuffer = normSpokenFull;
+    }
+
+    if (matchedAny) {
       notifyListeners();
       if (isFinal) {
         _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
       }
       return;
     }
@@ -137,18 +200,28 @@ class IqroController extends ChangeNotifier {
     // Mismatch handling:
     // Mark red only when utterance finalizes (VAD) OR when clearly different
     // multi-letter speech was heard for this cell.
+    final targetCell = data.content[_activeIndex];
+    final targetCompact =
+        _normalizeArabic(targetCell.arabic).replaceAll(' ', '');
     final bool hasSubstantialWrongSpeech =
-        normDelta.replaceAll(' ', '').length >=
-            (normTarget.replaceAll(' ', '').length + 2);
+        deltaCompact.length >= (targetCompact.length + 2);
 
     if (isFinal || hasSubstantialWrongSpeech) {
-      if (_lastMistakeOrderId != targetCell.orderId) {
+      if (_lastMistakeOrderId != targetCell.orderId &&
+          _statuses[targetCell.orderId] != IqroCellStatus.correct) {
         _statuses[targetCell.orderId] = IqroCellStatus.mistake;
         _lastMistakeOrderId = targetCell.orderId;
         CamcorderSoundHelper.instance.playMistakeAlert();
+        MistakeAudioService.instance.scheduleMistakeCapture(
+          surah: 200 + data.jilid,
+          ayah: data.page,
+          wordIndex: targetCell.orderId.clamp(0, 255),
+          wordText: targetCell.arabic,
+        );
       }
       if (isFinal) {
         _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
       }
     }
 
@@ -157,7 +230,7 @@ class IqroController extends ChangeNotifier {
 
   /// Normalizes Arabic text for resilient Iqro matching:
   /// - Removes diacritics/harakat, tatweel, punctuation, '='
-  /// - Unifies alif variants (أ إ آ ٱ -> ا), ta marbuta (ة -> ه/ت), alif maqsura (ى -> ي)
+  /// - Unifies alif/hamza variants (ء آ أ إ ٱ -> ا), ta marbuta (ة -> ت), alif maqsura (ى -> ي)
   static String _normalizeArabic(String input) {
     if (input.isEmpty) return '';
     final sb = StringBuffer();
@@ -170,6 +243,7 @@ class IqroController extends ChangeNotifier {
         continue;
       }
       switch (rune) {
+        case 0x0621: // ء
         case 0x0622: // آ
         case 0x0623: // أ
         case 0x0625: // إ
@@ -199,28 +273,115 @@ class IqroController extends ChangeNotifier {
     return sb.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
-  static bool _isMatch(String spoken, String target) {
-    if (target.isEmpty || spoken.isEmpty) return false;
-    final sCompact = spoken.replaceAll(' ', '');
-    final tCompact = target.replaceAll(' ', '');
-    if (sCompact.isEmpty || tCompact.isEmpty) return false;
+  /// Returns how many characters of [sCompact] were consumed if [sCompact] matches
+  /// [tCompact], or 0 if not matched. Supports multi-syllable utterances (e.g. "ابت" -> consumes "ا").
+  static int _matchPrefixLen(
+    String sCompact,
+    String tCompact, {
+    required bool inQuran,
+  }) {
+    if (tCompact.isEmpty || sCompact.isEmpty) return 0;
 
-    // Exact or substring match
-    if (sCompact.contains(tCompact) ||
-        (sCompact.length >= 2 && tCompact.contains(sCompact))) {
-      return true;
-    }
-
-    // Phonetic / near-homophone tolerance for short Hijaiyah / Quran ASR output
-    final sSim = _similarity(sCompact, tCompact);
-    if (tCompact.length <= 2) {
-      // Single/double-letter Iqro 1-2: match if first/any base letter matches
-      for (int i = 0; i < tCompact.length; i++) {
-        if (sCompact.contains(tCompact[i])) return true;
+    // 1. Direct prefix/contains match: consume up to end of target match so remaining speech advances next cell
+    final int idx = sCompact.indexOf(tCompact);
+    if (idx != -1) {
+      // Allow at most 1-2 stray leading chars (e.g. elongation 'ا' from previous syllable)
+      if (idx <= 2) {
+        return idx + tCompact.length;
       }
-      return sSim >= 0.5;
     }
-    return sSim >= 0.65;
+
+    // For words that exist in Al-Qur'an, keep strict Quran-ASR word matching.
+    if (inQuran) {
+      if (sCompact.length >= 3 &&
+          tCompact.contains(sCompact) &&
+          sCompact.length >= tCompact.length - 1) {
+        return sCompact.length;
+      }
+      if (_similarity(sCompact, tCompact) >= 0.68) {
+        return sCompact.length;
+      }
+      return 0;
+    }
+
+    // 2. Non-Quran practice syllables: also check phonetic skeleton
+    final sSkel = _toPhoneticSkeleton(sCompact);
+    final tSkel = _toPhoneticSkeleton(tCompact);
+    final int skelIdx = sSkel.indexOf(tSkel);
+    if (skelIdx != -1 && skelIdx <= 2) {
+      return (skelIdx + tSkel.length).clamp(1, sCompact.length);
+    }
+
+    // 3. Single-letter Hijaiyah tolerance (e.g. ASR hears "با" for "ب")
+    if (tSkel.length == 1) {
+      final String ch = tSkel[0];
+      if (sSkel.startsWith(ch)) return 1;
+      if (sSkel.length <= 2 && sSkel.contains(ch)) return sCompact.length;
+      return 0;
+    }
+
+    // 4. Two-letter cells (e.g. "بت"): require strong overlap, not just 1 letter
+    if (tSkel.length == 2) {
+      if (sSkel.length >= 2) {
+        final int firstIdx = sSkel.indexOf(tSkel[0]);
+        if (firstIdx != -1 && firstIdx <= 1) {
+          final int secondIdx = sSkel.indexOf(tSkel[1], firstIdx + 1);
+          if (secondIdx != -1 && secondIdx - firstIdx <= 2) {
+            return (secondIdx + 1).clamp(1, sCompact.length);
+          }
+        }
+        if (_similarity(sSkel, tSkel) >= 0.5) {
+          return sCompact.length;
+        }
+      }
+      return 0;
+    }
+
+    // 5. Multi-letter non-Quran practice words
+    if (sSkel.length >= 2 &&
+        tSkel.contains(sSkel) &&
+        sSkel.length >= tSkel.length - 1) {
+      return sCompact.length;
+    }
+    if (_similarity(sSkel, tSkel) >= 0.58) {
+      return sCompact.length;
+    }
+    return 0;
+  }
+
+  /// Collapses acoustically close Hijaiyah letters for non-Quran practice syllables.
+  static String _toPhoneticSkeleton(String s) {
+    final sb = StringBuffer();
+    for (final rune in s.runes) {
+      switch (rune) {
+        case 0x0639: // ع
+          sb.write('ا');
+          break;
+        case 0x062B: // ث
+        case 0x0635: // ص
+          sb.write('س');
+          break;
+        case 0x0637: // ط
+          sb.write('ت');
+          break;
+        case 0x0636: // ض
+          sb.write('د');
+          break;
+        case 0x0630: // ذ
+        case 0x0638: // ظ
+          sb.write('ز');
+          break;
+        case 0x062D: // ح
+          sb.write('ه');
+          break;
+        case 0x0642: // ق
+          sb.write('ك');
+          break;
+        default:
+          sb.writeCharCode(rune);
+      }
+    }
+    return sb.toString();
   }
 
   static double _similarity(String a, String b) {

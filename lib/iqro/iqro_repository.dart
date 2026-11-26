@@ -25,6 +25,7 @@ class IqroCellData {
   final int col;
   final String arabic;
   final String latin;
+  final bool inQuran;
 
   const IqroCellData({
     required this.orderId,
@@ -32,6 +33,7 @@ class IqroCellData {
     required this.col,
     required this.arabic,
     required this.latin,
+    this.inQuran = false,
   });
 
   factory IqroCellData.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,7 @@ class IqroCellData {
       col: (pos['col'] as num?)?.toInt() ?? 1,
       arabic: (json['arabic'] as String? ?? '').trim(),
       latin: (json['latin'] as String? ?? '').trim(),
+      inQuran: json['inQuran'] as bool? ?? false,
     );
   }
 }

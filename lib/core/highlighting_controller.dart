@@ -256,6 +256,22 @@ class HighlightingController extends rq.HighlightingController {
     notifyListeners();
   }
 
+  // ── Smart Stall Recovery & Stream Hygiene ──
+  // Recovers silently when the upstream package sequencer stalls inside:
+  // 1) Tajweed mode (where DictationSequencer disables auto-reanchor),
+  // 2) Prefix-trap `isPartial` locks or stale `_pendingTail` drains, or
+  // 3) Overgrown OnlineStream/AsrTokenProcessor buffers (>480 phonemes).
+  static const int _stallRecoveryTimeoutMs = 2200;
+  static const int _stallRecoveryMinAsrGrowth = 12;
+  static const int _stallRecoveryCooldownMs = 2200;
+  static const int _streamHygieneMaxChars = 480;
+  static const int _streamHygieneIdleMs = 850;
+  int _lastWordMatchedEpochMs = 0;
+  int _lastWordMatchedAsrLen = 0;
+  int _lastSmartRecoveryEpochMs = 0;
+  bool _isRecoveryScheduled = false;
+  bool _smartRecoveryDisposed = false;
+
   // Audio Playback state
   int? _audioSurah;
   int? _audioAyah;
@@ -271,6 +287,7 @@ class HighlightingController extends rq.HighlightingController {
     super.isTajweed = true,
     super.config = const rq.TrackerConfig(),
   }) {
+    debugRecognizedText.addListener(_onAsrTextObserved);
     _store.onMistakeDetected = (surah, ayah, wordIndex) {
       if (activeSource == RecitationSource.localAsr ||
           activeSource == RecitationSource.maglisRemote) {
@@ -333,14 +350,16 @@ class HighlightingController extends rq.HighlightingController {
     // store-first skip keeps verdicts already saved (e.g. by Maglis packets)
     // untouched, and only words the package actually gave a verdict for are
     // received — bulk-completed-but-unspoken ayahs stay unsaved.
+    bool progressed = false;
     final last = _lastIngestedCoordinate;
     if (last != null && last.surah == surah && ayah > last.ayah) {
       for (int a = last.ayah; a < ayah; a++) {
-        _ingestAyah(surah, a);
+        if (_ingestAyah(surah, a)) progressed = true;
       }
+      progressed = true;
     }
     _lastIngestedCoordinate = (surah: surah, ayah: ayah);
-    _ingestAyah(surah, ayah);
+    if (_ingestAyah(surah, ayah)) progressed = true;
 
     // Receive completed-ayah marks too — including the package's bulk
     // completion of skipped ayahs.
@@ -350,17 +369,24 @@ class HighlightingController extends rq.HighlightingController {
       for (final a in engineCompleted) {
         if (!mine.contains(a)) {
           _store.markAyahCompleted(surah, a);
+          progressed = true;
         }
       }
+    }
+
+    if (progressed) {
+      _lastWordMatchedEpochMs = DateTime.now().millisecondsSinceEpoch;
+      _lastWordMatchedAsrLen = debugRecognizedText.value.length;
     }
   }
 
   /// Receives one ayah's word verdicts from the package into the store.
-  /// Zero-allocation, single-verse fetch, and bails on the first unspoken word.
-  void _ingestAyah(int surah, int ayah) {
+  /// Returns `true` if any word verdict was newly recorded or updated.
+  bool _ingestAyah(int surah, int ayah) {
     final verse = repository.getVerse(surah, ayah);
-    if (verse == null) return;
+    if (verse == null) return false;
     final int wordCount = verse.uthmaniWords.length;
+    bool changed = false;
     for (int w0 = 0; w0 < wordCount; w0++) {
       final current = _store.getWordStatus(surah, ayah, w0);
       if (current == 1) {
@@ -368,6 +394,7 @@ class HighlightingController extends rq.HighlightingController {
         if (super.isWordYellow(ayah, w0, surah: surah)) {
           final errors = super.getWordErrors(ayah, w0, surah: surah);
           _store.markYellow(surah, ayah, w0, errors);
+          changed = true;
         }
         continue;
       }
@@ -376,17 +403,200 @@ class HighlightingController extends rq.HighlightingController {
       // Word has no verdict yet in store: check engine
       if (super.isWordGreen(ayah, w0, surah: surah)) {
         _store.markGreen(surah, ayah, w0);
+        changed = true;
       } else if (super.isWordYellow(ayah, w0, surah: surah)) {
         final errors = super.getWordErrors(ayah, w0, surah: surah);
         _store.markYellow(surah, ayah, w0, errors);
+        changed = true;
       } else if (super.isWordRed(ayah, w0, surah: surah)) {
         _store.markRed(surah, ayah, w0);
+        changed = true;
       } else if (super.isWordNeutral(ayah, w0, surah: surah)) {
         _store.markNeutral(surah, ayah, w0);
+        changed = true;
       } else {
         // Sequential recitation: words after the first unspoken word cannot be spoken yet.
         break;
       }
+    }
+    return changed;
+  }
+
+  void _resetRecoveryWatchdog() {
+    _lastWordMatchedEpochMs = DateTime.now().millisecondsSinceEpoch;
+    _lastWordMatchedAsrLen = 0;
+  }
+
+  void _onAsrTextObserved() {
+    if (_smartRecoveryDisposed || _isRecoveryScheduled) return;
+    if (super.state != rq.TrackerState.tracking) return;
+    if (isAudioActive || isRemoteReciting || _isRetargeting) return;
+
+    final int surah = targetSurah;
+    final int? ayah = activeAyah.value;
+    if (surah == 0 || ayah == null || ayah <= 0) return;
+
+    final String asrText = debugRecognizedText.value;
+    if (asrText.isEmpty) {
+      _lastWordMatchedAsrLen = 0;
+      return;
+    }
+
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastWordMatchedEpochMs == 0) {
+      _lastWordMatchedEpochMs = nowMs;
+    }
+
+    final int stallMs = nowMs - _lastWordMatchedEpochMs;
+    final int asrGrowth = (asrText.length - _lastWordMatchedAsrLen).clamp(0, 10000);
+
+    // 1. Stream hygiene: flush Sherpa OnlineStream cleanly after a long stretch
+    // once the reciter pauses briefly (>850ms without new match), avoiding
+    // 500+ token AsrTokenProcessor replays and encoder latency drift.
+    if (asrText.length > _streamHygieneMaxChars &&
+        stallMs >= _streamHygieneIdleMs &&
+        nowMs - _lastSmartRecoveryEpochMs >= 2000) {
+      _isRecoveryScheduled = true;
+      _lastSmartRecoveryEpochMs = nowMs;
+      scheduleMicrotask(() {
+        _isRecoveryScheduled = false;
+        _flushCurrentAyahStream(surah, ayah);
+      });
+      return;
+    }
+
+    // 2. Smart stall recovery: if >= 12 new ASR phonemes arrived over >= 2.2s
+    // with zero word progress, break prefix traps or re-anchor onto current/next ayah.
+    if (stallMs >= _stallRecoveryTimeoutMs &&
+        asrGrowth >= _stallRecoveryMinAsrGrowth &&
+        nowMs - _lastSmartRecoveryEpochMs >= _stallRecoveryCooldownMs) {
+      _isRecoveryScheduled = true;
+      _lastSmartRecoveryEpochMs = nowMs;
+      scheduleMicrotask(() {
+        _isRecoveryScheduled = false;
+        _performSmartStallRecovery(surah, ayah, asrText);
+      });
+    }
+  }
+
+  void _flushCurrentAyahStream(int surah, int ayah) {
+    if (_smartRecoveryDisposed) return;
+    if (super.state != rq.TrackerState.tracking) return;
+    if (isAudioActive || isRemoteReciting || _isRetargeting) return;
+    if (targetSurah != surah || activeAyah.value != ayah) return;
+    if (super.targetSurah != surah) return;
+
+    _resetRecoveryWatchdog();
+    super.setManualAyah(surah, ayah);
+  }
+
+  void _performSmartStallRecovery(int surah, int ayah, String asrSnapshot) {
+    if (_smartRecoveryDisposed) return;
+    if (super.state != rq.TrackerState.tracking) return;
+    if (isAudioActive || isRemoteReciting || _isRetargeting) return;
+    if (targetSurah != surah || activeAyah.value != ayah) return;
+
+    // Re-check in case an isolate word-match landed in the same tick
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastWordMatchedEpochMs < _stallRecoveryTimeoutMs - 200) {
+      return;
+    }
+
+    final String cleanAsr = asrSnapshot.replaceAll(' ', '');
+    if (cleanAsr.length < _stallRecoveryMinAsrGrowth) {
+      _flushCurrentAyahStream(surah, ayah);
+      return;
+    }
+
+    final int tailLen = cleanAsr.length > 44 ? 44 : cleanAsr.length;
+    final String query = cleanAsr.substring(cleanAsr.length - tailLen);
+    final int maxDist = (query.length * 0.24).floor().clamp(1, 10);
+
+    // Search a tight forward window: unspoken part of current ayah .. +2 ayahs
+    final int maxAyah = QuranMetadata.getAyahCount(surah);
+    final int endAyah = (ayah + 2) <= maxAyah ? (ayah + 2) : maxAyah;
+    final StringBuffer windowBuf = StringBuffer();
+    final List<({int ayah, int start, int end})> spans = [];
+
+    for (int a = ayah; a <= endAyah; a++) {
+      final verse = repository.getVerse(surah, a);
+      if (verse == null) continue;
+
+      int firstUnspoken = 0;
+      if (a == ayah) {
+        for (int i = 0; i < verse.uthmaniWords.length; i++) {
+          if (!_store.isRead(surah, a, i)) {
+            firstUnspoken = i;
+            break;
+          }
+          if (i == verse.uthmaniWords.length - 1) {
+            firstUnspoken = verse.uthmaniWords.length;
+          }
+        }
+      }
+
+      final int phStartIdx = (firstUnspoken < verse.wordMap.length)
+          ? verse.wordMap[firstUnspoken]
+          : firstUnspoken;
+      if (phStartIdx >= verse.phonemeWords.length) continue;
+
+      final String ph = verse.phonemeWords
+          .sublist(phStartIdx)
+          .join('')
+          .replaceAll(' ', '');
+      if (ph.isEmpty) continue;
+
+      final int s = windowBuf.length;
+      windowBuf.write(ph);
+      final int e = windowBuf.length;
+      spans.add((ayah: a, start: s, end: e));
+    }
+
+    final String windowPhonemes = windowBuf.toString();
+    int? matchedAyah;
+    if (windowPhonemes.length >= query.length - maxDist) {
+      final matches = rq.findNearMatches(query, windowPhonemes, maxDist);
+      if (matches.isNotEmpty) {
+        matches.sort((a, b) => a.dist.compareTo(b.dist));
+        final best = matches.first;
+
+        int? ayahForPos(int pos) {
+          for (final sp in spans) {
+            if (pos >= sp.start && pos < sp.end) return sp.ayah;
+          }
+          return null;
+        }
+
+        final int bestMid = (best.start + best.end) ~/ 2;
+        final int? candidateAyah = ayahForPos(bestMid);
+
+        // Enforce unambiguous winner across different ayahs
+        bool ambiguous = false;
+        if (candidateAyah != null) {
+          for (int i = 1; i < matches.length; i++) {
+            final other = matches[i];
+            if (other.dist > best.dist + 1) break;
+            final otherAyah = ayahForPos((other.start + other.end) ~/ 2);
+            if (otherAyah != null && otherAyah != candidateAyah) {
+              ambiguous = true;
+              break;
+            }
+          }
+        }
+        if (!ambiguous && candidateAyah != null) {
+          matchedAyah = candidateAyah;
+        }
+      }
+    }
+
+    if (matchedAyah != null && matchedAyah > ayah) {
+      // Confident forward match in subsequent ayah: jump cleanly while preserving highlights.
+      _resetRecoveryWatchdog();
+      setManualAyah(surah, matchedAyah);
+    } else {
+      // Still on current ayah (likely jammed in isPartial / _pendingTail / OnlineStream):
+      // cleanly reset OnlineStream + jumpToWord(firstUnspoken) with zero highlight loss.
+      _flushCurrentAyahStream(surah, ayah);
     }
   }
 
@@ -580,6 +790,7 @@ class HighlightingController extends rq.HighlightingController {
 
   @override
   void setManualAyah(int surah, int ayah) {
+    _resetRecoveryWatchdog();
     // Local fields are the authoritative coordinate for every reader from
     // this moment on; a manual selection also takes the coordinate away from
     // any running audio playback.
@@ -621,6 +832,25 @@ class HighlightingController extends rq.HighlightingController {
 
     globalRevision.value++;
     notifyListeners();
+  }
+
+  @override
+  void startRecordingSession() {
+    _resetRecoveryWatchdog();
+    super.startRecordingSession();
+  }
+
+  @override
+  void resumeTracking() {
+    _resetRecoveryWatchdog();
+    super.resumeTracking();
+  }
+
+  @override
+  void dispose() {
+    _smartRecoveryDisposed = true;
+    debugRecognizedText.removeListener(_onAsrTextObserved);
+    super.dispose();
   }
 
   @override

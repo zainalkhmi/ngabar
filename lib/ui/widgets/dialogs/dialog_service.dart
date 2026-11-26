@@ -18,6 +18,7 @@ import 'live_stream_sheet.dart';
 import 'dialog_base.dart';
 import '../../../audio/mistake_audio_service.dart';
 import '../../../audio/screen_recording_service.dart';
+import '../../../iqro/iqro_picker_sheet.dart';
 
 export 'app_alert_dialogs.dart' show PermissionReason;
 export 'package:recite_quran/recite_quran.dart' show VoiceSearchResult;
@@ -28,6 +29,7 @@ export 'mistake_compare_dialog.dart' show MistakeCompareDialog;
 export 'screen_recordings_sheet.dart'
     show ScreenRecordingsSheet, RecordingPreviewDialog;
 export 'live_stream_sheet.dart' show LiveStreamSheet;
+export '../../../iqro/iqro_picker_sheet.dart' show IqroPickerSheet;
 export 'dialog_base.dart';
 
 /// Centralized Dialog Service facade.
@@ -265,5 +267,10 @@ abstract final class DialogService {
   /// Displays the Maglis Chat modal bottom sheet.
   static Future<void> showMaglisChat(BuildContext context) {
     return MaglisChatSheet.show(context);
+  }
+
+  /// Opens the Iqro (Jilid 1–6) picker bottom sheet.
+  static Future<void> showIqroPicker(BuildContext context) {
+    return IqroPickerSheet.show(context);
   }
 }
