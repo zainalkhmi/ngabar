@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/app_state.dart';
+import '../../../core/subscription_service.dart';
+import 'subscription_paywall_sheet.dart';
 import '../../../core/maglis_link_service.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../maglis/maglis_controller.dart';
@@ -368,6 +370,10 @@ class _MaglisEntryDialogState extends State<MaglisEntryDialog> {
         ));
       }
     } else {
+      if (!SubscriptionService.instance.isPremium) {
+        await SubscriptionPaywallSheet.show(context);
+        return;
+      }
       // ── MAKING A NEW MAGLIS AS HOST: Verified Relay Start ──
       _focusNode.unfocus();
       setState(() => _isCreating = true);

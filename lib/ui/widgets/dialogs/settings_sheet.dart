@@ -6,7 +6,9 @@ import '../../../audio/quran_audio_service.dart';
 import '../../../audio/screen_recording_service.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
+import '../../../core/subscription_service.dart';
 import 'dialog_service.dart';
+import 'subscription_paywall_sheet.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. SETTINGS TILE & DIVIDER
@@ -285,6 +287,99 @@ class SettingsSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 14),
+
+              // ── Ngabar Premium / Subscription Banner ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: SubscriptionService.instance.isPremiumNotifier,
+                  builder: (context, isPremium, _) {
+                    return GestureDetector(
+                      onTap: () => SubscriptionPaywallSheet.show(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 13,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isPremium
+                                ? [
+                                    const Color(0xFF047857),
+                                    const Color(0xFF10B981),
+                                  ]
+                                : [
+                                    const Color(0xFF0E7490),
+                                    const Color(0xFF10B981),
+                                  ],
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: 0.28),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                isPremium
+                                    ? Icons.verified_rounded
+                                    : Icons.star_rounded,
+                                color: const Color(0xFFFACC15),
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isPremium
+                                        ? 'Ngabar Premium Aktif'
+                                        : 'Upgrade ke Ngabar Premium',
+                                    style: const TextStyle(
+                                      fontFamily: 'cairo',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    isPremium
+                                        ? 'Semua fitur PRO & AI terbuka'
+                                        : 'Tajwid AI, Iqro\' AI, Rekam Layar & Majlis',
+                                    style: TextStyle(
+                                      fontFamily: 'cairo',
+                                      fontSize: 11.5,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.88),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
 
               // ── Application Preferences Card ──
               Padding(

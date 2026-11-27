@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/platform_utils.dart';
 import '../../core/app_state.dart';
+import '../../core/subscription_service.dart';
 import '../../core/maglis_link_service.dart';
 import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
@@ -11,6 +12,7 @@ import '../../audio/screen_recording_service.dart';
 import '../../iqro/iqro_audio_service.dart';
 import '../../iqro/iqro_picker_sheet.dart';
 import 'dialogs/live_stream_sheet.dart';
+import 'dialogs/subscription_paywall_sheet.dart';
 
 enum MicBarMode { recording, maglis, maglisRecording, normal }
 
@@ -1153,6 +1155,11 @@ class BottomActionBar extends StatelessWidget {
                         subCol: subCol,
                         onTap: () {
                           Navigator.of(sheetCtx).pop();
+                          if (!liveActive &&
+                              !SubscriptionService.instance.isPremium) {
+                            SubscriptionPaywallSheet.show(context);
+                            return;
+                          }
                           LiveStreamSheet.show(
                             context,
                             surahName: surahName,

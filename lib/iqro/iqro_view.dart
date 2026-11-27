@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import '../audio/mistake_audio_service.dart';
 import '../core/app_state.dart';
+import '../core/subscription_service.dart';
+import '../maglis/maglis_controller.dart';
+import '../ui/widgets/dialogs/subscription_paywall_sheet.dart';
 import 'iqro_audio_service.dart';
 import 'iqro_controller.dart';
 import 'iqro_mistake_sheet.dart';
 import 'iqro_picker_sheet.dart';
+import 'iqro_progress_service.dart';
 import 'iqro_repository.dart';
+import 'iqro_tajweed_service.dart';
+import 'iqro_tajweed_sheet.dart';
 
 /// Digital Iqro Mushaf view replacing MushafView when Iqro mode is active.
 /// Displays structured rows & columns from dyazincahya/iqro-json with
@@ -54,6 +60,9 @@ class _IqroViewState extends State<IqroView> {
         IqroController.instance,
         app.iqroPositionNotifier,
         MistakeAudioService.instance.revision,
+        IqroAudioService.instance.isAutoPlayingNotifier,
+        IqroAudioService.instance.autoPlayOrderIdNotifier,
+        IqroAudioService.instance.tempoNotifier,
       ]),
       builder: (context, _) {
         final ctrl = IqroController.instance;
@@ -73,101 +82,238 @@ class _IqroViewState extends State<IqroView> {
                   color: c.surface,
                   border: Border(
                     bottom: BorderSide(
-                      color: c.border.withValues(alpha: 0.45),
-                      width: 0.8,
+                      color: c.border.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
                 child: Row(
                   children: [
-                    // Back to Mushaf pill
-                    _HeaderPill(
+                    // Back to Quran Mushaf button
+                    _HeaderIconBtn(
                       icon: Icons.menu_book_rounded,
-                      label: app.isIndonesian ? 'Mushaf' : 'Mushaf',
+                      tooltip: app.isIndonesian
+                          ? 'Kembali ke Mushaf Al-Qur\'an'
+                          : 'Return to Mushaf',
                       isDark: isDark,
                       c: c,
                       onTap: widget.onExitIqro,
                     ),
                     const SizedBox(width: 8),
+
                     // Jilid & Page selector pill
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => IqroPickerSheet.show(context),
+                        onTap: () {
+                          IqroPickerSheet.show(context);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 7,
+                            vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10B981)
-                                .withValues(alpha: isDark ? 0.16 : 0.10),
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF10B981)
-                                  .withValues(alpha: 0.35),
+                              color: c.border.withValues(alpha: 0.6),
                             ),
                           ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  app.isArabic
-                                      ? 'اقرأ $jilid  •  ص $page/$totalPages'
-                                      : (app.isIndonesian
-                                          ? "Iqro' $jilid  •  Hal $page/$totalPages"
-                                          : "Iqro' $jilid  •  Pg $page/$totalPages"),
-                                  maxLines: 1,
-                                  softWrap: false,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: isDark ? 0.25 : 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Jilid $jilid',
                                   style: TextStyle(
                                     fontFamily: 'cairo',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
                                     color: isDark
                                         ? const Color(0xFF34D399)
                                         : const Color(0xFF047857),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  size: 18,
-                                  color: isDark
-                                      ? const Color(0xFF34D399)
-                                      : const Color(0xFF047857),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Halaman $page / $totalPages',
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: c.text,
+                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 20,
+                                color: c.textSecondary,
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
+
                     const SizedBox(width: 8),
-                    // Latin transliteration toggle
-                    _HeaderPill(
-                      icon: Icons.translate_rounded,
-                      label: 'Latin',
-                      isActive: _showLatin,
+
+                    // Toggle Latin transliteration
+                    _HeaderIconBtn(
+                      icon: _showLatin
+                          ? Icons.subtitles_rounded
+                          : Icons.subtitles_off_rounded,
+                      tooltip: _showLatin
+                          ? 'Sembunyikan Latin'
+                          : 'Tampilkan Latin',
                       isDark: isDark,
                       c: c,
-                      onTap: () => setState(() => _showLatin = !_showLatin),
+                      onTap: () {
+                        setState(() => _showLatin = !_showLatin);
+                      },
                     ),
+
                     const SizedBox(width: 6),
-                    // Reset page highlights
+
+                    // Reset progress for this page
                     _HeaderIconBtn(
                       icon: Icons.refresh_rounded,
-                      tooltip: app.isArabic
-                          ? 'إعادة ضبط الصفحة'
-                          : (app.isIndonesian ? 'Reset Halaman' : 'Reset Page'),
+                      tooltip: 'Reset Halaman',
                       isDark: isDark,
                       c: c,
-                      onTap: ctrl.resetPageProgress,
+                      onTap: () => ctrl.resetPageProgress(),
                     ),
                   ],
                 ),
               ),
+
+              // Sub-toolbar: Auto-Play, Tempo, Exam Mode & Stats
+              if (pageData != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: c.border.withValues(alpha: 0.35),
+                        width: 0.7,
+                      ),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        // 1. Auto-Play "Dengar & Ikuti"
+                        _HeaderPill(
+                          icon: IqroAudioService.instance.isAutoPlayingNotifier.value
+                              ? Icons.stop_circle_rounded
+                              : Icons.play_circle_filled_rounded,
+                          label: IqroAudioService.instance.isAutoPlayingNotifier.value
+                              ? 'Stop'
+                              : 'Dengar',
+                          isActive: IqroAudioService.instance.isAutoPlayingNotifier.value,
+                          isDark: isDark,
+                          c: c,
+                          onTap: ctrl.isExamMode
+                              ? () {}
+                              : () {
+                                  if (IqroAudioService
+                                      .instance.isAutoPlayingNotifier.value) {
+                                    IqroAudioService.instance.stopAutoPlay();
+                                  } else {
+                                    IqroAudioService.instance.startAutoPlayPage(
+                                      pageData.content,
+                                      startIndex: ctrl.activeIndex,
+                                      onCellActive: (idx) =>
+                                          ctrl.selectCell(idx),
+                                    );
+                                  }
+                                },
+                        ),
+                        const SizedBox(width: 6),
+                        // 2. Tempo Toggle (0.75x / 1.0x)
+                        _HeaderPill(
+                          icon: Icons.speed_rounded,
+                          label: IqroAudioService.instance.tempo < 1.0
+                              ? '0.75x'
+                              : '1.0x',
+                          isActive: IqroAudioService.instance.tempo < 1.0,
+                          isDark: isDark,
+                          c: c,
+                          onTap: () =>
+                              IqroAudioService.instance.toggleTempo(),
+                        ),
+                        const SizedBox(width: 6),
+                        // 3. Exam Mode ("Ujian")
+                        _HeaderPill(
+                          icon: Icons.assignment_turned_in_rounded,
+                          label: ctrl.isExamMode ? 'Mode Ujian' : 'Ujian',
+                          isActive: ctrl.isExamMode,
+                          isDark: isDark,
+                          c: c,
+                          onTap: () {
+                            if (!ctrl.isExamMode &&
+                                !SubscriptionService.instance.isPremium) {
+                              SubscriptionPaywallSheet.show(context);
+                              return;
+                            }
+                            IqroAudioService.instance.stopAutoPlay();
+                            ctrl.setExamMode(!ctrl.isExamMode);
+                          },
+                        ),
+                        if (ctrl.isExamMode || ctrl.isPageCompleted) ...[
+                          const SizedBox(width: 6),
+                          _HeaderPill(
+                            icon: Icons.emoji_events_rounded,
+                            label: 'Rapor (${ctrl.accuracyPct}%)',
+                            isActive: ctrl.accuracyPct >=
+                                IqroProgressService.passThresholdPct,
+                            isDark: isDark,
+                            c: c,
+                            onTap: () => _showExamReportSheet(
+                              context,
+                              pageData: pageData,
+                              ctrl: ctrl,
+                              c: c,
+                              isDark: isDark,
+                            ),
+                          ),
+                        ],
+                        if (MaglisController.instance.inSession) ...[
+                          const SizedBox(width: 6),
+                          _HeaderPill(
+                            icon: Icons.groups_rounded,
+                            label: 'Kirim ke Majlis',
+                            isActive: true,
+                            isDark: isDark,
+                            c: c,
+                            onTap: () {
+                              MaglisController.instance.sendChatMessage(
+                                "📖 Belajar Iqro' ${pageData.jilid} • Hal ${pageData.page}",
+                              );
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
 
               // Live AI heard / instruction strip
               if (widget.isRecording ||
@@ -200,13 +346,9 @@ class _IqroViewState extends State<IqroView> {
                                     ? (app.isArabic
                                         ? 'جاري الاستماع لقراءة اقرأ...'
                                         : (app.isIndonesian
-                                            ? "Mendengarkan bacaan Iqro'..."
-                                            : "Listening to Iqro' recitation..."))
-                                    : (app.isArabic
-                                        ? 'المسموع: ${ctrl.lastHeardText}'
-                                        : (app.isIndonesian
-                                            ? 'Terdeteksi: ${ctrl.lastHeardText}'
-                                            : 'Heard: ${ctrl.lastHeardText}')),
+                                            ? 'Mendengarkan bacaan Iqro\'...'
+                                            : 'Listening to Iqro recitation...'))
+                                    : '"${ctrl.lastHeardText}"',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textDirection: ctrl.lastHeardText.isEmpty
@@ -214,17 +356,16 @@ class _IqroViewState extends State<IqroView> {
                                     : TextDirection.rtl,
                                 style: TextStyle(
                                   fontFamily: 'cairo',
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? const Color(0xFF34D399)
-                                      : const Color(0xFF047857),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.text,
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
+                                horizontal: 6,
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
@@ -339,7 +480,8 @@ class _IqroViewState extends State<IqroView> {
                     textDirection: TextDirection.rtl,
                     style: TextStyle(
                       fontFamily: 'HafsSmart',
-                      fontSize: 26,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                       color: c.text,
                     ),
                   ),
@@ -558,15 +700,30 @@ class _IqroViewState extends State<IqroView> {
   }) {
     final status = ctrl.statusFor(cell.orderId);
     final isActive = ctrl.activeIndex == flatIndex;
+    final isAutoPlayingThis =
+        IqroAudioService.instance.autoPlayOrderIdNotifier.value == cell.orderId;
+
+    // Detect Tajweed rule for advanced jilids (Iqro' 4, 5, 6)
+    final jilid = ctrl.currentPageData?.jilid ?? 1;
+    final tajweedRule = jilid >= 4
+        ? IqroTajweedService.instance.detectRule(cell.arabic)
+        : null;
 
     Color bgColor = Colors.transparent;
     Color borderColor = Colors.transparent;
     Color textColor = c.text;
 
-    if (status == IqroCellStatus.correct) {
+    if (isAutoPlayingThis) {
+      bgColor = const Color(0xFF0EA5E9).withValues(alpha: isDark ? 0.24 : 0.14);
+      borderColor = const Color(0xFF0EA5E9).withValues(alpha: 0.85);
+    } else if (status == IqroCellStatus.correct) {
       bgColor = const Color(0xFF10B981).withValues(alpha: isDark ? 0.22 : 0.14);
       borderColor = const Color(0xFF10B981).withValues(alpha: 0.65);
       textColor = isDark ? const Color(0xFF6EE7B7) : const Color(0xFF065F46);
+    } else if (status == IqroCellStatus.tajweed) {
+      bgColor = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.24 : 0.16);
+      borderColor = const Color(0xFFF59E0B).withValues(alpha: 0.80);
+      textColor = isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E);
     } else if (status == IqroCellStatus.mistake) {
       bgColor = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.14);
       borderColor = const Color(0xFFEF4444).withValues(alpha: 0.70);
@@ -596,11 +753,23 @@ class _IqroViewState extends State<IqroView> {
           );
           return;
         }
+        if (status == IqroCellStatus.tajweed && tajweedRule != null) {
+          IqroTajweedSheet.show(
+            context,
+            cell: cell,
+            rule: tajweedRule,
+            onRetryCell: () => ctrl.selectCell(flatIndex),
+          );
+          return;
+        }
         ctrl.selectCell(flatIndex);
-        IqroAudioService.instance.speakArabic(
-          cell.arabic,
-          latinText: cell.latin,
-        );
+        if (!ctrl.isExamMode) {
+          IqroAudioService.instance.speakArabic(
+            cell.arabic,
+            latinText: cell.latin,
+            inQuran: cell.inQuran,
+          );
+        }
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -617,47 +786,129 @@ class _IqroViewState extends State<IqroView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: (cell.inQuran
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF64748B))
-                      .withValues(alpha: isDark ? 0.20 : 0.10),
-                  borderRadius: BorderRadius.circular(5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Tajweed badge if detected
+                if (tajweedRule != null)
+                  GestureDetector(
+                    onTap: () {
+                      IqroTajweedSheet.show(
+                        context,
+                        cell: cell,
+                        rule: tajweedRule,
+                        onRetryCell: () => ctrl.selectCell(flatIndex),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Color(tajweedRule.badgeColorValue)
+                            .withValues(alpha: isDark ? 0.22 : 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: Color(tajweedRule.badgeColorValue)
+                              .withValues(alpha: 0.5),
+                          width: 0.6,
+                        ),
+                      ),
+                      child: Text(
+                        tajweedRule.nameId.split(' ')[0],
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 7.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(tajweedRule.badgeColorValue),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+
+                // Qur'an / Latihan badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (cell.inQuran
+                            ? const Color(0xFF047857)
+                            : const Color(0xFF64748B))
+                        .withValues(alpha: isDark ? 0.28 : 0.14),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: (cell.inQuran
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF94A3B8))
+                          .withValues(alpha: isDark ? 0.45 : 0.35),
+                      width: 0.7,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (cell.inQuran) ...[
+                        Icon(
+                          Icons.menu_book_rounded,
+                          size: 9.5,
+                          color: isDark
+                              ? const Color(0xFF34D399)
+                              : const Color(0xFF047857),
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Text(
+                        cell.inQuran ? "Qur'an" : 'Latihan',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: cell.inQuran
+                              ? (isDark
+                                  ? const Color(0xFF34D399)
+                                  : const Color(0xFF047857))
+                              : c.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              decoration: cell.inQuran
+                  ? BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF064E3B).withValues(alpha: 0.08)
+                          : const Color(0xFFECFDF5).withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF10B981)
+                            .withValues(alpha: isDark ? 0.18 : 0.22),
+                        width: 0.8,
+                      ),
+                    )
+                  : null,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
                 child: Text(
-                  cell.inQuran ? "Qur'an" : 'Latihan',
+                  cell.arabic,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'cairo',
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w700,
-                    color: cell.inQuran
-                        ? (isDark
-                            ? const Color(0xFF34D399)
-                            : const Color(0xFF047857))
-                        : c.textSecondary,
+                    fontFamily: 'HafsSmart',
+                    fontSize: cell.inQuran ? 30 : 27,
+                    height: 1.45,
+                    letterSpacing: cell.inQuran ? 0.4 : 0.0,
+                    fontWeight: cell.inQuran ? FontWeight.w500 : FontWeight.normal,
+                    color: textColor,
                   ),
                 ),
               ),
             ),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                cell.arabic,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'HafsSmart',
-                  fontSize: 27,
-                  height: 1.45,
-                  color: textColor,
-                ),
-              ),
-            ),
-            if (_showLatin && cell.latin.isNotEmpty) ...[
+            if (_showLatin && !ctrl.isExamMode && cell.latin.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
                 cell.latin,
@@ -681,6 +932,187 @@ class _IqroViewState extends State<IqroView> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showExamReportSheet(
+    BuildContext context, {
+    required IqroPageData pageData,
+    required IqroController ctrl,
+    required ThemeColors c,
+    required bool isDark,
+  }) {
+    final pct = ctrl.accuracyPct;
+    final passed = pct >= IqroProgressService.passThresholdPct;
+    final mistakes = ctrl.mistakenCells;
+    final totalPages = IqroRepository.instance.pageCountFor(pageData.jilid);
+
+    if (pct > 0) {
+      IqroProgressService.instance.recordPageScore(
+        pageData.jilid,
+        pageData.page,
+        pct,
+      );
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: c.border.withValues(alpha: 0.5)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: c.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Icon(
+                passed ? Icons.stars_rounded : Icons.school_rounded,
+                size: 44,
+                color: passed
+                    ? const Color(0xFFFACC15)
+                    : const Color(0xFFF59E0B),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                passed
+                    ? "Lulus! Iqro' ${pageData.jilid} Hal ${pageData.page}"
+                    : "Terus Berlatih • Iqro' ${pageData.jilid} Hal ${pageData.page}",
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: c.text,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Akurasi: $pct% (${ctrl.correctCount}/${pageData.content.length} Benar, ${ctrl.mistakeCount} Salah)',
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: passed
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
+                ),
+              ),
+              if (mistakes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Ketuk kata yang salah untuk dengar perbandingan:',
+                    style: TextStyle(
+                      fontFamily: 'cairo',
+                      fontSize: 11.5,
+                      color: c.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final m in mistakes.take(8))
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          IqroMistakeSheet.show(
+                            context,
+                            jilid: pageData.jilid,
+                            page: pageData.page,
+                            cell: m,
+                            onRetryCell: () {},
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444)
+                                .withValues(alpha: isDark ? 0.2 : 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFFEF4444)
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Text(
+                            m.arabic,
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(
+                              fontFamily: 'HafsSmart',
+                              fontSize: 18,
+                              color: isDark
+                                  ? const Color(0xFFFCA5A5)
+                                  : const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        ctrl.resetPageProgress();
+                      },
+                      child: const Text(
+                        'Ulangi',
+                        style: TextStyle(fontFamily: 'cairo'),
+                      ),
+                    ),
+                  ),
+                  if (pageData.page < totalPages) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          ctrl.goToPage(pageData.jilid, pageData.page + 1);
+                        },
+                        child: const Text(
+                          'Halaman Berikutnya',
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -786,8 +1218,8 @@ class _HeaderIconBtn extends StatelessWidget {
 class _PageNavButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool iconRight;
   final bool enabled;
+  final bool iconRight;
   final ThemeColors c;
   final bool isDark;
   final VoidCallback onTap;
@@ -795,8 +1227,8 @@ class _PageNavButton extends StatelessWidget {
   const _PageNavButton({
     required this.icon,
     required this.label,
-    this.iconRight = false,
     required this.enabled,
+    this.iconRight = false,
     required this.c,
     required this.isDark,
     required this.onTap,
@@ -804,10 +1236,13 @@ class _PageNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.35,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
+    if (!enabled) return const SizedBox.shrink();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(

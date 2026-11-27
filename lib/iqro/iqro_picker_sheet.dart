@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/app_state.dart';
+import '../core/subscription_service.dart';
 import '../ui/widgets/dialogs/dialog_base.dart';
+import '../ui/widgets/dialogs/subscription_paywall_sheet.dart';
 import 'iqro_controller.dart';
+import 'iqro_progress_service.dart';
 import 'iqro_repository.dart';
 
 /// Pro book-cover grid bottom sheet allowing the user to pick Iqro Jilid (1-6)
@@ -41,10 +44,15 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
   void initState() {
     super.initState();
     _selectedJilid = AppState.instance.iqroJilid;
+    IqroProgressService.instance.ensureLoaded();
   }
 
   Future<void> _openIqroPage(int jilid, int page) async {
     HapticFeedback.selectionClick();
+    if (jilid >= 3 && !SubscriptionService.instance.isPremium) {
+      await SubscriptionPaywallSheet.show(context);
+      return;
+    }
     final app = AppState.instance;
     await app.setIqroPosition(jilid, page);
     await app.setIqroMode(true);
@@ -61,7 +69,11 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
 
     return AppBottomSheet(
       maxHeightFactor: 0.88,
-      extraListenable: app.iqroModeNotifier,
+      extraListenable: Listenable.merge([
+        app.iqroModeNotifier,
+        IqroProgressService.instance,
+        SubscriptionService.instance.isPremiumNotifier,
+      ]),
       headerBuilder: (context, c, isAr, isDark) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
@@ -120,6 +132,9 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
         );
       },
       builder: (context, c, isAr, isDark) {
+        final progress = IqroProgressService.instance;
+        final weakLetters = progress.topWeakLetters(limit: 5);
+        final isPremium = SubscriptionService.instance.isPremium;
         return Column(
           children: [
             // 3x2 Book Cover Grid (all 6 jilids visible)
@@ -135,6 +150,11 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
                           child: _IqroBookTile(
                             jilid: i + 1,
                             totalPages: IqroRepository.volumes[i].totalPages,
+                            passedPages: progress.passedCountFor(
+                              i + 1,
+                              IqroRepository.volumes[i].totalPages,
+                            ),
+                            showProBadge: !isPremium && (i + 1) >= 3,
                             color: _bookColors[i],
                             isSelected: _selectedJilid == i + 1,
                             onTap: () {
@@ -155,6 +175,11 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
                           child: _IqroBookTile(
                             jilid: i + 1,
                             totalPages: IqroRepository.volumes[i].totalPages,
+                            passedPages: progress.passedCountFor(
+                              i + 1,
+                              IqroRepository.volumes[i].totalPages,
+                            ),
+                            showProBadge: !isPremium,
                             color: _bookColors[i],
                             isSelected: _selectedJilid == i + 1,
                             onTap: () {
@@ -169,6 +194,108 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
                 ],
               ),
             ),
+
+            // Weak letters analytics strip (if any recorded mistakes)
+            if (weakLetters.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+                child: Row(
+                  children: [
+                    Text(
+                      'Perlu Latihan:',
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: c.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final w in weakLetters)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444)
+                                      .withValues(alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(0xFFEF4444)
+                                        .withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${w.letter} (${w.mistakes}x)',
+                                  style: TextStyle(
+                                    fontFamily: 'HafsSmart',
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? const Color(0xFFFCA5A5)
+                                        : const Color(0xFF991B1B),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (!isPremium && _selectedJilid >= 3)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                child: GestureDetector(
+                  onTap: () => SubscriptionPaywallSheet.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0E7490), Color(0xFF10B981)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.star_rounded,
+                          size: 16,
+                          color: Color(0xFFFACC15),
+                        ),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            "Upgrade PRO untuk akses penuh Ujian & AI Iqro' 3–6",
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
 
             // Compact page section header
             Padding(
@@ -223,45 +350,71 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
                   final isCurrent = app.isIqroMode &&
                       app.iqroJilid == _selectedJilid &&
                       app.iqroPage == pageNum;
+                  final isPassed =
+                      progress.isPagePassed(_selectedJilid, pageNum);
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _openIqroPage(_selectedJilid, pageNum),
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: isCurrent
-                            ? activeBookColor
-                            : (isDark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : Colors.black.withValues(alpha: 0.035)),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isCurrent
-                              ? activeBookColor
-                              : (isDark
-                                  ? Colors.white.withValues(alpha: 0.12)
-                                  : Colors.black.withValues(alpha: 0.08)),
-                          width: isCurrent ? 1.6 : 1.0,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? activeBookColor
+                                : (isPassed
+                                    ? const Color(0xFF10B981)
+                                        .withValues(alpha: isDark ? 0.18 : 0.10)
+                                    : (isDark
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : Colors.black
+                                            .withValues(alpha: 0.035))),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isCurrent
+                                  ? activeBookColor
+                                  : (isPassed
+                                      ? const Color(0xFF10B981)
+                                          .withValues(alpha: 0.6)
+                                      : (isDark
+                                          ? Colors.white.withValues(alpha: 0.12)
+                                          : Colors.black
+                                              .withValues(alpha: 0.08))),
+                              width: isCurrent ? 1.6 : 1.0,
+                            ),
+                            boxShadow: isCurrent
+                                ? [
+                                    BoxShadow(
+                                      color: activeBookColor
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            '$pageNum',
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isCurrent ? Colors.white : c.text,
+                            ),
+                          ),
                         ),
-                        boxShadow: isCurrent
-                            ? [
-                                BoxShadow(
-                                  color: activeBookColor.withValues(alpha: 0.35),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Text(
-                        '$pageNum',
-                        style: TextStyle(
-                          fontFamily: 'cairo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: isCurrent ? Colors.white : c.text,
-                        ),
-                      ),
+                        if (isPassed)
+                          const Positioned(
+                            top: -4,
+                            right: -4,
+                            child: Icon(
+                              Icons.stars_rounded,
+                              size: 14,
+                              color: Color(0xFFFACC15),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -277,6 +430,8 @@ class _IqroPickerSheetState extends State<IqroPickerSheet> {
 class _IqroBookTile extends StatelessWidget {
   final int jilid;
   final int totalPages;
+  final int passedPages;
+  final bool showProBadge;
   final Color color;
   final bool isSelected;
   final VoidCallback onTap;
@@ -284,6 +439,8 @@ class _IqroBookTile extends StatelessWidget {
   const _IqroBookTile({
     required this.jilid,
     required this.totalPages,
+    this.passedPages = 0,
+    this.showProBadge = false,
     required this.color,
     required this.isSelected,
     required this.onTap,
@@ -366,6 +523,26 @@ class _IqroBookTile extends StatelessWidget {
                               Icons.check_circle_rounded,
                               size: 12,
                               color: gold,
+                            )
+                          else if (showProBadge)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 0.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: gold,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'PRO',
+                                style: TextStyle(
+                                  fontFamily: 'cairo',
+                                  fontSize: 6.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
                             ),
                         ],
                       ),
@@ -389,14 +566,18 @@ class _IqroBookTile extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      // Bottom: Total pages tag
+                      // Bottom: Passed progress or Total pages tag
                       Text(
-                        '$totalPages Hal',
+                        passedPages > 0
+                            ? '$passedPages/$totalPages Lulus'
+                            : '$totalPages Hal',
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 8.5,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.85),
+                          color: passedPages > 0
+                              ? gold
+                              : Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
                     ],

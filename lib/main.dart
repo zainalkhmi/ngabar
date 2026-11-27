@@ -29,6 +29,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 
 import 'core/app_state.dart';
+import 'core/subscription_service.dart';
 import 'core/highlighting_controller.dart';
 import 'ui/tracking_screen.dart';
 import 'mushaf/mushaf_view.dart';
@@ -474,6 +475,7 @@ class _OrchestratorState extends State<_Orchestrator>
   void initState() {
     super.initState();
     MaglisLinkService.instance.init();
+    unawaited(SubscriptionService.instance.init());
     initModelDownloadTracker();
     WidgetsBinding.instance.addObserver(this);
     _setupEngineSubscriptions();

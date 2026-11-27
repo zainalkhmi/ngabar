@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import 'iqro_repository.dart';
+import 'iqro_tajweed_service.dart';
 import 'iqro_tts_stub.dart'
     if (dart.library.js_interop) 'iqro_tts_web.dart';
 
@@ -32,6 +34,60 @@ class IqroAudioService {
   /// Iqro cell audio is actively playing.
   final ValueNotifier<bool> isPlayingNotifier = ValueNotifier<bool>(false);
   bool get isPlaying => isPlayingNotifier.value;
+
+  /// Playback tempo multiplier: 1.0 (normal) or 0.75 (slow for beginners).
+  final ValueNotifier<double> tempoNotifier = ValueNotifier<double>(1.0);
+  double get tempo => tempoNotifier.value;
+
+  /// Auto-play "Dengar & Ikuti" state for sequential page playback.
+  final ValueNotifier<bool> isAutoPlayingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<int?> autoPlayOrderIdNotifier = ValueNotifier<int?>(null);
+  int _autoPlaySeq = 0;
+
+  void toggleTempo() {
+    tempoNotifier.value = tempoNotifier.value == 1.0 ? 0.75 : 1.0;
+  }
+
+  Future<void> stopAutoPlay() async {
+    _autoPlaySeq++;
+    isAutoPlayingNotifier.value = false;
+    autoPlayOrderIdNotifier.value = null;
+    await stop();
+  }
+
+  Future<void> startAutoPlayPage(
+    List<IqroCellData> cells, {
+    int startIndex = 0,
+    void Function(int flatIndex)? onCellActive,
+  }) async {
+    if (cells.isEmpty) return;
+    final int seq = ++_autoPlaySeq;
+    isAutoPlayingNotifier.value = true;
+
+    final int begin = startIndex.clamp(0, cells.length - 1);
+    for (int i = begin; i < cells.length; i++) {
+      if (seq != _autoPlaySeq) break;
+      final cell = cells[i];
+      autoPlayOrderIdNotifier.value = cell.orderId;
+      onCellActive?.call(i);
+      await speakArabic(
+        cell.arabic,
+        latinText: cell.latin,
+        inQuran: cell.inQuran,
+      );
+      if (seq != _autoPlaySeq) break;
+      if (i + 1 < cells.length) {
+        await Future<void>.delayed(
+          Duration(milliseconds: tempoNotifier.value < 1.0 ? 480 : 300),
+        );
+      }
+    }
+
+    if (seq == _autoPlaySeq) {
+      isAutoPlayingNotifier.value = false;
+      autoPlayOrderIdNotifier.value = null;
+    }
+  }
 
   static const Set<int> _supportedLetters = {
     0x0627, 0x0628, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F,
@@ -82,9 +138,16 @@ class IqroAudioService {
     } catch (_) {}
   }
 
-  /// Speaks an Iqro' cell. Uses `id-ID` TTS on [latinText] (matching the
-  /// dyazincahya/iqro-json reference) with automatic offline MP3 fallback.
-  Future<void> speakArabic(String arabicText, {String? latinText}) async {
+  /// Speaks an Iqro' cell.
+  /// If [inQuran] is true, attempts to play authentic Qari audio from
+  /// QuranCDN / Tarteel QUL wbw files first. Otherwise or on failure, falls back to
+  /// `id-ID` TTS on [latinText] (matching the dyazincahya/iqro-json reference)
+  /// and bundled offline Hijaiyah syllable MP3s.
+  Future<void> speakArabic(
+    String arabicText, {
+    String? latinText,
+    bool inQuran = false,
+  }) async {
     final int gen = ++_playGeneration;
     _completeActiveTts();
     HapticFeedback.selectionClick();
@@ -100,6 +163,37 @@ class IqroAudioService {
     try {
       await _player?.stop();
     } catch (_) {}
+
+    if (gen != _playGeneration) return;
+
+    // 1. If marked as inQuran, try authentic Qari audio from QuranCDN / QUL
+    if (inQuran) {
+      final quranAudio =
+          await IqroTajweedService.instance.resolveQuranWordAudio(arabicText);
+      if (gen != _playGeneration) return;
+
+      if (quranAudio != null && quranAudio.isNotEmpty) {
+        isPlayingNotifier.value = true;
+        final player = _ensurePlayer();
+        try {
+          if (quranAudio.startsWith('http')) {
+            await player.setUrl(quranAudio);
+          } else {
+            await player.setFilePath(quranAudio);
+          }
+          await player.setSpeed(tempoNotifier.value);
+          if (gen != _playGeneration) return;
+          await player.play();
+          return;
+        } catch (e) {
+          debugPrint('[IqroAudioService] Qari audio error, falling back: $e');
+        } finally {
+          if (gen == _playGeneration) {
+            isPlayingNotifier.value = false;
+          }
+        }
+      }
+    }
 
     if (gen != _playGeneration) return;
 
@@ -125,6 +219,7 @@ class IqroAudioService {
       await player.setAudioSources([
         for (final asset in assets) AudioSource.asset(asset),
       ]);
+      await player.setSpeed(tempoNotifier.value);
       if (gen != _playGeneration) return;
       await player.play();
     } catch (e) {
@@ -144,7 +239,7 @@ class IqroAudioService {
 
       final ok = await speakWebLatinTts(
         text: cleanLatin,
-        rate: _ttsSpeechRate,
+        rate: _ttsSpeechRate * tempoNotifier.value,
         onComplete: () {
           if (gen == _playGeneration) {
             _completeActiveTts();

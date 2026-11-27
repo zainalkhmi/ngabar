@@ -506,22 +506,26 @@ class AppState extends ChangeNotifier {
   }
 
   // ── Tracker Configuration ──────────────────────────────────────────────────
-  // Default to Responsive (easy strictness + normal harakat speed) with fast
-  // reanchor stall threshold (26 phonemes) so AI Mushaf follows fluidly without
-  // getting stuck on dropped weak vowels or built-in phone mics.
-  MatchingStrictness aiStrictness = MatchingStrictness.easy;
-  TrackerConfig _trackerConfig = _buildTrackerConfig(MatchingStrictness.easy);
+  // Default to Balanced (MatchingStrictness.normal, maxSkipWords = 2) with
+  // fast auto-reanchor threshold (28 phonemes) for crisp, low-latency tracking.
+  MatchingStrictness aiStrictness = MatchingStrictness.normal;
+  TrackerConfig _trackerConfig = _buildTrackerConfig(MatchingStrictness.normal);
   TrackerConfig get trackerConfig => _trackerConfig;
   late final ValueNotifier<TrackerConfig> trackerConfigNotifier =
       ValueNotifier<TrackerConfig>(_trackerConfig);
 
   static TrackerConfig _buildTrackerConfig(MatchingStrictness strictness) {
+    final int stallThreshold = switch (strictness) {
+      MatchingStrictness.easy => 24,
+      MatchingStrictness.normal => 28,
+      MatchingStrictness.hard => 36,
+    };
     return TrackerConfig(
       recitationSpeed: RecitationSpeed.normal,
       matchingStrictness: strictness,
       enableEarlyMatching: true,
       enableAutoReanchor: true,
-      reanchorStallThreshold: strictness == MatchingStrictness.hard ? 30 : 26,
+      reanchorStallThreshold: stallThreshold,
     );
   }
 
@@ -1001,7 +1005,7 @@ class AppState extends ChangeNotifier {
       final savedStrictness = prefs.getString('ai_strictness');
       aiStrictness = savedStrictness != null
           ? MatchingStrictness.fromName(savedStrictness)
-          : MatchingStrictness.easy;
+          : MatchingStrictness.normal;
       _trackerConfig = _buildTrackerConfig(aiStrictness);
       trackerConfigNotifier.value = _trackerConfig;
 

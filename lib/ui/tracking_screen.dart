@@ -12,7 +12,9 @@ import '../audio/quran_download_service.dart';
 import '../audio/camcorder_sound_helper.dart';
 import '../audio/screen_recording_service.dart';
 import '../core/platform_utils.dart';
+import '../core/subscription_service.dart';
 import 'widgets/dialogs/dialog_service.dart';
+import 'widgets/dialogs/subscription_paywall_sheet.dart';
 import '../core/app_state.dart';
 import 'widgets/mic_bar.dart';
 import '../mushaf/mushaf_view.dart';
@@ -480,6 +482,11 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 onToggleTajweed: () {
                                   final bool newIsTajweed =
                                       app.currentMode != AppMode.tajweed;
+                                  if (newIsTajweed &&
+                                      !SubscriptionService.instance.isPremium) {
+                                    SubscriptionPaywallSheet.show(context);
+                                    return;
+                                  }
                                   if (newIsTajweed) {
                                     app.setMode(AppMode.tajweed);
                                     widget.controller.setTajweedMode(true);
@@ -513,6 +520,12 @@ class _TrackingScreenState extends State<TrackingScreen>
                                     .instance.isRecordingNotifier.value,
                                 onScreenRecordTap: () {
                                   app.dismissBanner();
+                                  if (!ScreenRecordingService
+                                          .instance.isRecordingNotifier.value &&
+                                      !SubscriptionService.instance.isPremium) {
+                                    SubscriptionPaywallSheet.show(context);
+                                    return;
+                                  }
                                   unawaited(_toggleScreenRecording());
                                 },
                                 onOpenRecordingsTap: () {

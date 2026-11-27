@@ -44,9 +44,22 @@ class CamcorderSoundHelper {
       _stopChimeWav = _synthesizeCamcorderChime(isStart: false);
       _mistakeAlertWav = _synthesizeMistakeAlert();
 
-      _startPlayer = AudioPlayer();
-      _stopPlayer = AudioPlayer();
-      _mistakePlayer = AudioPlayer();
+      // Never hijack Android AudioFocus / AudioSession from active mic or Maglis WebRTC
+      _startPlayer = AudioPlayer(
+        handleInterruptions: false,
+        handleAudioSessionActivation: false,
+        androidApplyAudioAttributes: false,
+      );
+      _stopPlayer = AudioPlayer(
+        handleInterruptions: false,
+        handleAudioSessionActivation: false,
+        androidApplyAudioAttributes: false,
+      );
+      _mistakePlayer = AudioPlayer(
+        handleInterruptions: false,
+        handleAudioSessionActivation: false,
+        androidApplyAudioAttributes: false,
+      );
 
       if (!kIsWeb) {
         final tempDir = await getTemporaryDirectory();
