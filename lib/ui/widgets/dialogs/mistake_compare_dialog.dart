@@ -5,6 +5,7 @@ import '../../../audio/quran_audio_service.dart';
 import '../../../core/app_state.dart';
 import '../../../core/highlighting_controller.dart';
 import '../../../mushaf/mushaf_provider.dart';
+import '../../../iqro/makhraj_visualizer.dart';
 import 'dialog_base.dart';
 import 'error_detail_dialog.dart' show QvpWordWidget;
 
@@ -217,6 +218,12 @@ class _MistakeCompareDialogState extends State<MistakeCompareDialog> {
                   ),
 
                   const SizedBox(height: 14),
+
+                  // ── Interactive Makharijul Huruf Diagram ──
+                  if (activeClip.wordText.trim().isNotEmpty) ...[
+                    MakhrajVisualizer(arabicText: activeClip.wordText),
+                    const SizedBox(height: 14),
+                  ],
 
                   // ── Card 1: User's Recorded Audio ──
                   _buildUserAudioCard(

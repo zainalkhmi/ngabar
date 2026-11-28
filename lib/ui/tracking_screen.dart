@@ -11,6 +11,7 @@ import '../audio/quran_timing_service.dart';
 import '../audio/quran_audio_service.dart';
 import '../audio/quran_download_service.dart';
 import '../audio/camcorder_sound_helper.dart';
+import '../audio/mad_duration_meter.dart';
 import '../audio/screen_recording_service.dart';
 import '../core/platform_utils.dart';
 import '../core/subscription_service.dart';
@@ -309,6 +310,23 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   void _onControllerUpdate() {
     _scheduleAutoTalqinCheck();
+    if (widget.isRecording && !AppState.instance.isIqroMode) {
+      final int s = widget.controller.targetSurah > 0
+          ? widget.controller.targetSurah
+          : AppState.instance.lastSurah;
+      final int a =
+          widget.controller.activeAyah.value ?? AppState.instance.lastAyah;
+      final int w = widget.controller.activeWordIndex ?? 0;
+      final verse = widget.controller.repository.getVerse(s, a);
+      if (verse != null && w >= 0 && w < verse.uthmaniWords.length) {
+        MadDurationMeter.instance.updateActiveWord(
+          wordKey: QuranCoordinate.packWordKey(s, a, w),
+          uthmaniWord: verse.uthmaniWords[w],
+        );
+      }
+    } else if (!widget.isRecording) {
+      MadDurationMeter.instance.reset();
+    }
     if (widget.controller.targetSurah != _lastSurah) {
       final newSurah = widget.controller.targetSurah;
       _surahNotifier.value = newSurah;
@@ -508,6 +526,15 @@ class _TrackingScreenState extends State<TrackingScreen>
                     children: [
                       // Main Verse Content (Mushaf View or Verse List View - preserved across auto-scroll toggles)
                       if (verseContentChild != null) verseContentChild,
+
+                      // Real-Time Mad & Ghunnah Duration Meter
+                      if (widget.isRecording && !app.isIqroMode)
+                        Positioned(
+                          bottom: MediaQuery.of(context).padding.bottom + 84,
+                          left: 20,
+                          right: 20,
+                          child: const MadMeterPill(),
+                        ),
 
                       // Accessible Hands-Free / Auto-Talqin Top Control Strip
                       if (!app.isIqroMode)

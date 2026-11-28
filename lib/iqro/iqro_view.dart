@@ -32,12 +32,19 @@ class IqroView extends StatefulWidget {
   State<IqroView> createState() => _IqroViewState();
 }
 
-class _IqroViewState extends State<IqroView> {
+class _IqroViewState extends State<IqroView>
+    with SingleTickerProviderStateMixin {
   bool _showLatin = false;
+  late final AnimationController _backlightFlowCtrl;
 
   @override
   void initState() {
     super.initState();
+    _backlightFlowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+
     final app = AppState.instance;
     final ctrl = IqroController.instance;
     if (ctrl.currentPageData == null ||
@@ -45,6 +52,12 @@ class _IqroViewState extends State<IqroView> {
         ctrl.currentPageData!.page != app.iqroPage) {
       ctrl.loadPage(app.iqroJilid, app.iqroPage);
     }
+  }
+
+  @override
+  void dispose() {
+    _backlightFlowCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -887,27 +900,16 @@ class _IqroViewState extends State<IqroView> {
               ],
             ),
             const SizedBox(height: 2),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-              decoration: cell.inQuran
-                  ? BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF064E3B).withValues(alpha: 0.08)
-                          : const Color(0xFFECFDF5).withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF10B981)
-                            .withValues(alpha: isDark ? 0.18 : 0.22),
-                        width: 0.8,
-                      ),
-                    )
-                  : null,
+            _buildAyahBacklightContainer(
+              cell: cell,
+              isActive: isActive,
+              isDark: isDark,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: _buildCellArabicText(
                   cell: cell,
                   isActive: isActive,
+                  isDark: isDark,
                   textColor: textColor,
                   ctrl: ctrl,
                   flatIndex: flatIndex,
@@ -944,10 +946,11 @@ class _IqroViewState extends State<IqroView> {
   }
 
   /// Builds beautifully formatted Arabic text with Quranic Ayah glyph `۝`,
-  /// clean waqaf ellipses layout, and word-by-word green highlighting matching the Mushaf.
+  /// clean waqaf ellipses layout, word-by-word green highlight, and lead word backlight matching the Mushaf.
   Widget _buildCellArabicText({
     required IqroCellData cell,
     required bool isActive,
+    required bool isDark,
     required Color textColor,
     required IqroController ctrl,
     required int flatIndex,
@@ -971,12 +974,16 @@ class _IqroViewState extends State<IqroView> {
     final baseFontSize = _calcArabicFontSize(cleanWords, cell.inQuran);
     final words = cleanWords.split(' ').where((w) => w.isNotEmpty).toList();
 
-    // Word-by-word green highlight when active and user is reciting or auditioning
+    // Word-by-word highlight when active and user is reciting or auditioning
     final int matchedCount = (isActive && ctrl.activeWordInCell > 0)
         ? ctrl.activeWordInCell.clamp(0, words.length)
         : 0;
 
-    if (words.length > 1 && matchedCount > 0) {
+    // Active lead word index (the word currently being recited/awaited)
+    final int leadWordIdx =
+        (isActive && matchedCount < words.length) ? matchedCount : -1;
+
+    if (words.isNotEmpty && (matchedCount > 0 || isActive)) {
       return RichText(
         textDirection: TextDirection.rtl,
         textAlign: TextAlign.center,
@@ -995,15 +1002,40 @@ class _IqroViewState extends State<IqroView> {
                 style: TextStyle(color: textColor.withValues(alpha: 0.5)),
               ),
             for (int i = 0; i < words.length; i++) ...[
-              TextSpan(
-                text: words[i],
-                style: TextStyle(
-                  color: i < matchedCount
-                      ? const Color(0xFF10B981) // Mushaf green highlight
-                      : textColor,
-                  fontWeight: i < matchedCount ? FontWeight.bold : null,
-                ),
-              ),
+              () {
+                final bool isMatched = i < matchedCount;
+                final bool isLead = i == leadWordIdx;
+
+                Color wColor = textColor;
+                Color? wBg;
+                FontWeight? wWeight;
+
+                if (isMatched) {
+                  // Already matched: serene emerald green matching Mushaf
+                  wColor = const Color(0xFF10B981);
+                  wBg = const Color(0xFF10B981)
+                      .withValues(alpha: isDark ? 0.18 : 0.12);
+                  wWeight = FontWeight.bold;
+                } else if (isLead) {
+                  // Awaited lead word: luminous amber/gold backlight matching Mushaf leadWordBand
+                  wColor = isDark
+                      ? const Color(0xFFFDE68A)
+                      : const Color(0xFFB45309);
+                  wBg = isDark
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.28)
+                      : const Color(0xFFFDE68A).withValues(alpha: 0.60);
+                  wWeight = FontWeight.bold;
+                }
+
+                return TextSpan(
+                  text: words[i],
+                  style: TextStyle(
+                    color: wColor,
+                    backgroundColor: wBg,
+                    fontWeight: wWeight,
+                  ),
+                );
+              }(),
               if (i < words.length - 1) const TextSpan(text: ' '),
             ],
             if (hasCircle)
@@ -1036,6 +1068,115 @@ class _IqroViewState extends State<IqroView> {
         fontWeight: cell.inQuran ? FontWeight.w500 : FontWeight.w600,
         color: textColor,
       ),
+    );
+  }
+
+  /// Wraps an Ayah with an animated flowing ambient backlight (gradient sweep)
+  /// when active, creating the serene, immersive "backlight flow" matching the Mushaf.
+  Widget _buildAyahBacklightContainer({
+    required IqroCellData cell,
+    required bool isActive,
+    required bool isDark,
+    required Widget child,
+  }) {
+    if (!cell.inQuran && !isActive) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: child,
+      );
+    }
+
+    if (!isActive) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        decoration: cell.inQuran
+            ? BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF064E3B).withValues(alpha: 0.08)
+                    : const Color(0xFFECFDF5).withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF10B981)
+                      .withValues(alpha: isDark ? 0.18 : 0.22),
+                  width: 0.8,
+                ),
+              )
+            : null,
+        child: child,
+      );
+    }
+
+    // Active Ayah: animated flowing backlight gradient sweeping gracefully across the verse!
+    return AnimatedBuilder(
+      animation: _backlightFlowCtrl,
+      builder: (context, _) {
+        final double t = _backlightFlowCtrl.value; // 0.0 -> 1.0
+        // RTL sweep: flows gently from right to left (1.6 -> -1.6)
+        final double sweepCenter = 1.6 - (3.2 * t);
+
+        final Color baseBg = cell.inQuran
+            ? (isDark
+                ? const Color(0xFF064E3B).withValues(alpha: 0.14)
+                : const Color(0xFFECFDF5).withValues(alpha: 0.75))
+            : (isDark
+                ? const Color(0xFF78350F).withValues(alpha: 0.12)
+                : const Color(0xFFFEF3C7).withValues(alpha: 0.60));
+
+        final Color flowAura = cell.inQuran
+            ? (isDark
+                ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                : const Color(0xFFD1FAE5).withValues(alpha: 0.95))
+            : (isDark
+                ? const Color(0xFFF59E0B).withValues(alpha: 0.32)
+                : const Color(0xFFFDE68A).withValues(alpha: 0.85));
+
+        final Color borderColor = cell.inQuran
+            ? (isDark
+                ? const Color(0xFF34D399).withValues(alpha: 0.50)
+                : const Color(0xFF10B981).withValues(alpha: 0.55))
+            : (isDark
+                ? const Color(0xFFFBBF24).withValues(alpha: 0.50)
+                : const Color(0xFFF59E0B).withValues(alpha: 0.55));
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            gradient: LinearGradient(
+              begin: Alignment(sweepCenter + 0.6, -0.1),
+              end: Alignment(sweepCenter - 0.6, 0.1),
+              colors: [
+                baseBg,
+                flowAura,
+                baseBg,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+            border: Border.all(
+              color: borderColor,
+              width: 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (cell.inQuran
+                        ? (isDark
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF059669))
+                        : (isDark
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFFD97706)))
+                    .withValues(alpha: isDark ? 0.20 : 0.14),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
     );
   }
 

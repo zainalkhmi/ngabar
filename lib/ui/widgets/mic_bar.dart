@@ -10,6 +10,7 @@ import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 import '../../audio/screen_recording_service.dart';
 import '../../audio/murojaah_audio_mode_sheet.dart';
+import '../../audio/pitch_maqam_sheet.dart';
 import '../../iqro/iqro_audio_service.dart';
 import '../../iqro/iqro_picker_sheet.dart';
 import 'dialogs/live_stream_sheet.dart';
@@ -1255,6 +1256,24 @@ class BottomActionBar extends StatelessWidget {
                       onTap: () {
                         Navigator.of(sheetCtx).pop();
                         MurojaahAudioModeSheet.show(context);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildToolsTile(
+                      icon: Icons.show_chart_rounded,
+                      title: isId
+                          ? 'Pitch & Maqam Analyzer (DTW)'
+                          : 'Pitch & Maqam Analyzer (DTW)',
+                      subtitle: isId
+                          ? 'Latihan irama Bayyati, Hijaz, Nahawand & Rast'
+                          : 'Compare F0 pitch contour with tilawah maqams',
+                      isActive: false,
+                      isDark: isDark,
+                      textCol: textCol,
+                      subCol: subCol,
+                      onTap: () {
+                        Navigator.of(sheetCtx).pop();
+                        PitchMaqamSheet.show(context);
                       },
                     ),
                     const SizedBox(height: 8),

@@ -47,6 +47,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'audio/camcorder_sound_helper.dart';
+import 'audio/mad_duration_meter.dart';
+import 'audio/pitch_maqam_analyzer.dart';
 import 'audio/mistake_audio_service.dart';
 import 'audio/quran_audio_handler.dart';
 import 'audio/quran_audio_service.dart';
@@ -568,6 +570,7 @@ class _OrchestratorState extends State<_Orchestrator>
         _maglisBroadcastThrottle?.cancel();
         await _audio.stop();
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         _ctrl?.finalize();
         if (mounted) {
           setState(() {});
@@ -1025,6 +1028,10 @@ class _OrchestratorState extends State<_Orchestrator>
           }
           ScreenRecordingService.instance.appendFloat32MicChunk(chunk);
           MistakeAudioService.instance.appendFloat32Chunk(chunk);
+          if (!AppState.instance.isIqroMode) {
+            MadDurationMeter.instance.onAudioChunk(chunk);
+            PitchMaqamAnalyzer.instance.onAudioChunk(chunk);
+          }
           if (AppState.instance.isIqroMode) {
             _engine.transcribe(chunk, isFinal: isFinal);
           } else {
@@ -1065,6 +1072,7 @@ class _OrchestratorState extends State<_Orchestrator>
         // Verse audio has stopped:
         _audio.clearBuffer();
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         // On Android, seamlessly re-open the mic stream so recitation works immediately!
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _startAudioRecordingStream();
@@ -1084,6 +1092,7 @@ class _OrchestratorState extends State<_Orchestrator>
           !IqroAudioService.instance.isPlaying) {
         _audio.clearBuffer();
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _startAudioRecordingStream();
         }
@@ -1102,6 +1111,7 @@ class _OrchestratorState extends State<_Orchestrator>
           !MistakeAudioService.instance.isPlaying) {
         _audio.clearBuffer();
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           _startAudioRecordingStream();
         }
@@ -1125,6 +1135,7 @@ class _OrchestratorState extends State<_Orchestrator>
           inMaglis: MaglisController.instance.inSession,
         ));
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         if (AppState.instance.isIqroMode) {
           IqroController.instance.resetSessionBuffer();
         } else {
@@ -1163,6 +1174,7 @@ class _OrchestratorState extends State<_Orchestrator>
         QuranAudioService.instance.stop();
         IqroAudioService.instance.stop();
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
 
         if (AppState.instance.isIqroMode) {
           IqroController.instance.resetSessionBuffer();
@@ -1681,6 +1693,7 @@ class _OrchestratorState extends State<_Orchestrator>
       },
       onClearBuffer: () {
         _engine.resetBuffer();
+        MadDurationMeter.instance.reset();
         _audio.clearBuffer();
       },
     );
