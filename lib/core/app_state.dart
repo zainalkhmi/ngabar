@@ -233,6 +233,19 @@ class AppState extends ChangeNotifier {
     await prefs.setBool('mistake_alert_enabled', value);
   }
 
+  bool _autoTalqinEnabled = false;
+  bool get autoTalqinEnabled => _autoTalqinEnabled;
+  final ValueNotifier<bool> autoTalqinNotifier = ValueNotifier<bool>(false);
+
+  Future<void> setAutoTalqinEnabled(bool value) async {
+    if (_autoTalqinEnabled == value) return;
+    _autoTalqinEnabled = value;
+    autoTalqinNotifier.value = value;
+    notifyListeners();
+    final prefs = await _getPrefs();
+    await prefs.setBool('auto_talqin_enabled', value);
+  }
+
   Future<void> setMaglisUserName(String name) async {
     final clean = name.trim().toUpperCase();
     final truncated = clean.length > 4 ? clean.substring(0, 4) : clean;
@@ -973,6 +986,8 @@ class AppState extends ChangeNotifier {
       maglisCommunityTapCount = prefs.getInt('maglis_community_tap_count') ?? 0;
       _maglisUserName = prefs.getString('maglis_user_name') ?? '';
       _mistakeAlertEnabled = prefs.getBool('mistake_alert_enabled') ?? true;
+      _autoTalqinEnabled = prefs.getBool('auto_talqin_enabled') ?? false;
+      autoTalqinNotifier.value = _autoTalqinEnabled;
 
       final seenBanners = prefs.getStringList('seen_banner_ids');
       if (seenBanners != null) {

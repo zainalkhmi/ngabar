@@ -325,8 +325,8 @@ class _IqroViewState extends State<IqroView> {
                     vertical: 7,
                   ),
                   color: widget.isRecording
-                      ? const Color(0xFF10B981)
-                          .withValues(alpha: isDark ? 0.12 : 0.08)
+                      ? const Color(0xFFF59E0B)
+                          .withValues(alpha: isDark ? 0.16 : 0.10)
                       : c.surface.withValues(alpha: 0.6),
                   child: widget.isRecording
                       ? Row(
@@ -334,9 +334,17 @@ class _IqroViewState extends State<IqroView> {
                             Container(
                               width: 8,
                               height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF10B981),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B),
                                 shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFF59E0B)
+                                        .withValues(alpha: 0.8),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -827,26 +835,23 @@ class _IqroViewState extends State<IqroView> {
                   const SizedBox.shrink(),
 
                 // Qur'an / Latihan badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (cell.inQuran
-                            ? const Color(0xFF047857)
-                            : const Color(0xFF64748B))
-                        .withValues(alpha: isDark ? 0.28 : 0.14),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: (cell.inQuran
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF94A3B8))
-                          .withValues(alpha: isDark ? 0.45 : 0.35),
-                      width: 0.7,
+                // Qur'an badge (only when cell is Quranic verse; never clutter exercise cells)
+                if (cell.inQuran)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: (isDark ? const Color(0xFF047857) : const Color(0xFF10B981))
+                          .withValues(alpha: isDark ? 0.30 : 0.16),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF10B981)
+                            .withValues(alpha: isDark ? 0.50 : 0.35),
+                        width: 0.7,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (cell.inQuran) ...[
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Icon(
                           Icons.menu_book_rounded,
                           size: 9.5,
@@ -855,23 +860,30 @@ class _IqroViewState extends State<IqroView> {
                               : const Color(0xFF047857),
                         ),
                         const SizedBox(width: 3),
-                      ],
-                      Text(
-                        cell.inQuran ? "Qur'an" : 'Latihan',
-                        style: TextStyle(
-                          fontFamily: 'cairo',
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: cell.inQuran
-                              ? (isDark
-                                  ? const Color(0xFF34D399)
-                                  : const Color(0xFF047857))
-                              : c.textSecondary,
+                        Text(
+                          "Qur'an",
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? const Color(0xFF34D399)
+                                : const Color(0xFF047857),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                      ],
+                    ),
+                  )
+                else if (isActive && !ctrl.isExamMode)
+                  // Subtle speaker / pulse hint on the active reading cursor
+                  Icon(
+                    Icons.volume_up_rounded,
+                    size: 11,
+                    color: const Color(0xFFF59E0B)
+                        .withValues(alpha: isDark ? 0.9 : 0.8),
+                  )
+                else
+                  const SizedBox(height: 14),
               ],
             ),
             const SizedBox(height: 2),
@@ -893,18 +905,12 @@ class _IqroViewState extends State<IqroView> {
                   : null,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
-                  cell.arabic,
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'HafsSmart',
-                    fontSize: cell.inQuran ? 30 : 27,
-                    height: 1.45,
-                    letterSpacing: cell.inQuran ? 0.4 : 0.0,
-                    fontWeight: cell.inQuran ? FontWeight.w500 : FontWeight.normal,
-                    color: textColor,
-                  ),
+                child: _buildCellArabicText(
+                  cell: cell,
+                  isActive: isActive,
+                  textColor: textColor,
+                  ctrl: ctrl,
+                  flatIndex: flatIndex,
                 ),
               ),
             ),
@@ -935,6 +941,116 @@ class _IqroViewState extends State<IqroView> {
         ),
       ),
     );
+  }
+
+  /// Builds beautifully formatted Arabic text with Quranic Ayah glyph `۝`,
+  /// clean waqaf ellipses layout, and word-by-word green highlighting matching the Mushaf.
+  Widget _buildCellArabicText({
+    required IqroCellData cell,
+    required bool isActive,
+    required Color textColor,
+    required IqroController ctrl,
+    required int flatIndex,
+  }) {
+    final String raw = cell.arabic;
+    final bool hasDots = raw.contains('...') || raw.contains('…');
+    final bool hasCircle = raw.contains('○') || raw.contains('۝');
+
+    // If marked as Quran and an authentic Mushaf text slice exists, use the Mushaf's exact Uthmani text!
+    final String cleanWords = (cell.inQuran &&
+            cell.mushafArabic != null &&
+            cell.mushafArabic!.isNotEmpty)
+        ? cell.mushafArabic!
+        : raw
+            .replaceAll('○', '')
+            .replaceAll('۝', '')
+            .replaceAll('...', '')
+            .replaceAll('…', '')
+            .trim();
+
+    final baseFontSize = _calcArabicFontSize(cleanWords, cell.inQuran);
+    final words = cleanWords.split(' ').where((w) => w.isNotEmpty).toList();
+
+    // Word-by-word green highlight when active and user is reciting or auditioning
+    final int matchedCount = (isActive && ctrl.activeWordInCell > 0)
+        ? ctrl.activeWordInCell.clamp(0, words.length)
+        : 0;
+
+    if (words.length > 1 && matchedCount > 0) {
+      return RichText(
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style: TextStyle(
+            fontFamily: 'HafsSmart',
+            fontSize: baseFontSize,
+            height: 1.45,
+            letterSpacing: cell.inQuran ? 0.4 : 0.0,
+            fontWeight: cell.inQuran ? FontWeight.w500 : FontWeight.w600,
+          ),
+          children: [
+            if (hasDots)
+              TextSpan(
+                text: '... ',
+                style: TextStyle(color: textColor.withValues(alpha: 0.5)),
+              ),
+            for (int i = 0; i < words.length; i++) ...[
+              TextSpan(
+                text: words[i],
+                style: TextStyle(
+                  color: i < matchedCount
+                      ? const Color(0xFF10B981) // Mushaf green highlight
+                      : textColor,
+                  fontWeight: i < matchedCount ? FontWeight.bold : null,
+                ),
+              ),
+              if (i < words.length - 1) const TextSpan(text: ' '),
+            ],
+            if (hasCircle)
+              TextSpan(
+                text: ' ۝',
+                style: TextStyle(
+                  color: matchedCount >= words.length
+                      ? const Color(0xFF10B981)
+                      : textColor.withValues(alpha: 0.7),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    String formattedText = cleanWords;
+    if (hasDots) formattedText = '... $formattedText';
+    if (hasCircle) formattedText = '$formattedText ۝';
+
+    return Text(
+      formattedText,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontFamily: 'HafsSmart',
+        fontSize: baseFontSize,
+        height: 1.45,
+        letterSpacing: cell.inQuran ? 0.4 : 0.0,
+        fontWeight: cell.inQuran ? FontWeight.w500 : FontWeight.w600,
+        color: textColor,
+      ),
+    );
+  }
+
+  /// Calculates dynamic legible Arabic font size based on character count and content type.
+  static double _calcArabicFontSize(String text, bool inQuran) {
+    final clean = text.replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640\s]'), '');
+    if (inQuran) {
+      if (clean.length > 25) return 23;
+      if (clean.length > 15) return 26;
+      return 29;
+    }
+    if (clean.length <= 2) return 36;
+    if (clean.length <= 4) return 31;
+    if (clean.length <= 6) return 27;
+    return 24;
   }
 
   void _showExamReportSheet(

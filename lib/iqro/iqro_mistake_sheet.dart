@@ -4,6 +4,7 @@ import '../audio/mistake_audio_service.dart';
 import '../core/app_state.dart';
 import 'iqro_audio_service.dart';
 import 'iqro_repository.dart';
+import 'makhraj_visualizer.dart';
 
 /// Bottom sheet shown when tapping a RED (mistake) Iqro' cell, allowing the
 /// user to compare their recorded voice against the correct offline pronunciation.
@@ -203,6 +204,8 @@ class IqroMistakeSheet extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 14),
+                MakhrajVisualizer(arabicText: cell.arabic),
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,

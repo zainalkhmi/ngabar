@@ -9,6 +9,7 @@ import '../../core/maglis_link_service.dart';
 import '../../maglis/maglis_controller.dart';
 import '../../audio/quran_audio_service.dart';
 import '../../audio/screen_recording_service.dart';
+import '../../audio/murojaah_audio_mode_sheet.dart';
 import '../../iqro/iqro_audio_service.dart';
 import '../../iqro/iqro_picker_sheet.dart';
 import 'dialogs/live_stream_sheet.dart';
@@ -43,6 +44,8 @@ class BottomActionBar extends StatelessWidget {
   final bool isRemoteReciting;
   final bool isIqroMode;
   final VoidCallback? onIqroTap;
+  final bool isAutoTalqin;
+  final VoidCallback? onToggleAutoTalqin;
 
   const BottomActionBar({
     super.key,
@@ -72,6 +75,8 @@ class BottomActionBar extends StatelessWidget {
     this.isRemoteReciting = false,
     this.isIqroMode = false,
     this.onIqroTap,
+    this.isAutoTalqin = false,
+    this.onToggleAutoTalqin,
   });
 
   MicBarMode get mode => isInMaglis
@@ -122,7 +127,9 @@ class BottomActionBar extends StatelessWidget {
             final double gap = isNarrow ? 2.5 : (maxW < 400.0 ? 3.5 : 5.0);
             final double maglisGap = isNarrow ? 6.0 : 8.0;
 
-            final int recBtnCount = onScreenRecordTap != null ? 3 : 2;
+            final int baseRecCount = onToggleAutoTalqin != null ? 3 : 2;
+            final int recBtnCount =
+                onScreenRecordTap != null ? baseRecCount + 1 : baseRecCount;
             final double normalWidth = math.min(maxW - 20.0, 460.0);
             final double recordingWidth =
                 micWidth + (stdBtnWidth * recBtnCount) + (gap * recBtnCount) + 22.0;
@@ -293,6 +300,33 @@ class BottomActionBar extends StatelessWidget {
                                               dockHeight: dockHeight,
                                               onTap: onToggleTajweed,
                                             ),
+                                            if (onToggleAutoTalqin != null) ...[
+                                              SizedBox(width: gap),
+                                              _buildActionButton(
+                                                child: Icon(
+                                                  isAutoTalqin
+                                                      ? Icons.hearing_rounded
+                                                      : Icons.hearing_outlined,
+                                                  size: 19.0,
+                                                  color: _btnFg(
+                                                    isDark,
+                                                    isActive: isAutoTalqin,
+                                                  ),
+                                                ),
+                                                tooltip: app.isIndonesian
+                                                    ? 'Auto-Talqin (Bantu Saat Lupa)'
+                                                    : (isAr
+                                                        ? 'التلقين التلقائي'
+                                                        : 'Auto-Talqin'),
+                                                isActive: isAutoTalqin,
+                                                isDark: isDark,
+                                                borderlessWhenInactive: true,
+                                                width: stdBtnWidth,
+                                                height: btnHeight,
+                                                dockHeight: dockHeight,
+                                                onTap: onToggleAutoTalqin!,
+                                              ),
+                                            ],
                                             if (onScreenRecordTap != null) ...[
                                               SizedBox(width: gap),
                                               _buildActionButton(
@@ -786,12 +820,25 @@ class BottomActionBar extends StatelessWidget {
     required double height,
     required bool isDark,
   }) {
+    final bool isIqro = AppState.instance.isIqroMode;
     final List<Color> gradient = isRecording
-        ? const [Color(0xFFFF3B6B), Color(0xFFE11D48)]
+        ? (isIqro
+            ? const [Color(0xFFFFC107), Color(0xFFF59E0B)]
+            : const [Color(0xFFFF3B6B), Color(0xFFE11D48)])
         : const [Color(0xFF10B981), Color(0xFF059669)];
 
-    return _TapScale(
-      onTap: onMic,
+    return Semantics(
+      button: true,
+      toggled: isRecording,
+      label: isRecording
+          ? (AppState.instance.isIndonesian
+              ? 'Hentikan rekaman bacaan'
+              : 'Stop recording recitation')
+          : (AppState.instance.isIndonesian
+              ? 'Mulai merekam bacaan'
+              : 'Start recording recitation'),
+      child: _TapScale(
+        onTap: onMic,
       child: Container(
         width: width,
         height: height,
@@ -807,11 +854,28 @@ class BottomActionBar extends StatelessWidget {
             width: 1.3,
           ),
           boxShadow: [
-            BoxShadow(
-              color: gradient[0].withValues(alpha: isDark ? 0.38 : 0.25),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
+            if (isRecording && isIqro) ...[
+              BoxShadow(
+                color: const Color(0xFFF59E0B)
+                    .withValues(alpha: isDark ? 0.70 : 0.55),
+                blurRadius: 18,
+                spreadRadius: 2.5,
+                offset: const Offset(0, 0),
+              ),
+              BoxShadow(
+                color: const Color(0xFFFFD54F)
+                    .withValues(alpha: isDark ? 0.50 : 0.40),
+                blurRadius: 8,
+                spreadRadius: 1,
+                offset: const Offset(0, 2),
+              ),
+            ] else ...[
+              BoxShadow(
+                color: gradient[0].withValues(alpha: isDark ? 0.38 : 0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ],
         ),
         alignment: Alignment.center,
@@ -886,6 +950,7 @@ class BottomActionBar extends StatelessWidget {
                     size: 26.0,
                   )),
       ),
+      ),
     );
   }
 
@@ -904,8 +969,12 @@ class BottomActionBar extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 350),
-      child: _TapScale(
-        onTap: onTap,
+      child: Semantics(
+        button: true,
+        toggled: isActive,
+        label: tooltip,
+        child: _TapScale(
+          onTap: onTap,
         child: SizedBox(
           width: width,
           height: dockHeight,
@@ -927,6 +996,7 @@ class BottomActionBar extends StatelessWidget {
               child: child,
             ),
           ),
+        ),
         ),
       ),
     );
@@ -1169,6 +1239,25 @@ class BottomActionBar extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                     ],
+                    const SizedBox(height: 8),
+                    _buildToolsTile(
+                      icon: Icons.headphones_rounded,
+                      title: isId
+                          ? "Audio-Only Muroja'ah (Hands-Free)"
+                          : "Audio-Only Muroja'ah (Hands-Free)",
+                      subtitle: isId
+                          ? 'Putar ayat → jeda baca → lanjut otomatis'
+                          : 'Listen, recite in pause, auto-advance',
+                      isActive: false,
+                      isDark: isDark,
+                      textCol: textCol,
+                      subCol: subCol,
+                      onTap: () {
+                        Navigator.of(sheetCtx).pop();
+                        MurojaahAudioModeSheet.show(context);
+                      },
+                    ),
+                    const SizedBox(height: 8),
                     _buildToolsTile(
                       icon: blurActive
                           ? Icons.visibility_off_rounded
@@ -1452,8 +1541,13 @@ class BottomActionBar extends StatelessWidget {
         ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
         : fgColor;
 
-    return _TapScale(
-      onTap: onSurahTap,
+    return Semantics(
+      button: true,
+      label: AppState.instance.isIndonesian
+          ? 'Pilih Surah atau Halaman: $surahName'
+          : 'Select Surah or Page: $surahName',
+      child: _TapScale(
+        onTap: onSurahTap,
       child: SizedBox(
         height: dockHeight,
         child: Center(
@@ -1518,6 +1612,7 @@ class BottomActionBar extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

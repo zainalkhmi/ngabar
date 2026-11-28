@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
+import 'iqro_tajweed_service.dart';
 
 /// Metadata for each Iqro volume (Jilid 1-6).
 class IqroVolumeInfo {
@@ -26,6 +27,7 @@ class IqroCellData {
   final String arabic;
   final String latin;
   final bool inQuran;
+  final String? mushafArabic;
 
   const IqroCellData({
     required this.orderId,
@@ -34,17 +36,30 @@ class IqroCellData {
     required this.arabic,
     required this.latin,
     this.inQuran = false,
+    this.mushafArabic,
   });
 
   factory IqroCellData.fromJson(Map<String, dynamic> json) {
     final pos = json['position'] as Map<String, dynamic>? ?? const {};
+    final arabic = (json['arabic'] as String? ?? '').trim();
+    final bool rawInQuran = json['inQuran'] as bool? ?? false;
+    final snippet = IqroTajweedService.instance.resolveSnippetSync(arabic);
+    final bool isQuran = rawInQuran ||
+        arabic.contains('○') ||
+        arabic.contains('۝') ||
+        arabic.contains('...') ||
+        arabic.contains('…') ||
+        snippet != null ||
+        IqroTajweedService.instance.hasQuranSnippet(arabic);
+
     return IqroCellData(
       orderId: (json['order_id'] as num?)?.toInt() ?? 0,
       row: (pos['row'] as num?)?.toInt() ?? 1,
       col: (pos['col'] as num?)?.toInt() ?? 1,
-      arabic: (json['arabic'] as String? ?? '').trim(),
+      arabic: arabic,
       latin: (json['latin'] as String? ?? '').trim(),
-      inQuran: json['inQuran'] as bool? ?? false,
+      inQuran: isQuran,
+      mushafArabic: snippet?.mushafText,
     );
   }
 }
@@ -143,6 +158,7 @@ class IqroRepository {
 
   Future<void> _ensureLoaded() async {
     if (_rawRoot != null) return;
+    await IqroTajweedService.instance.ensureLoaded();
     final jsonStr = await rootBundle.loadString('assets/iqro/iqro_data.json');
     _rawRoot = json.decode(jsonStr) as Map<String, dynamic>;
   }

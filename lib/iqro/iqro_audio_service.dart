@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import '../audio/quran_audio_service.dart';
+import '../audio/quran_timing_service.dart';
 import 'iqro_repository.dart';
 import 'iqro_tajweed_service.dart';
 import 'iqro_tts_stub.dart'
@@ -166,16 +168,69 @@ class IqroAudioService {
 
     if (gen != _playGeneration) return;
 
-    // 1. If marked as inQuran, try authentic Qari audio from QuranCDN / QUL
-    if (inQuran) {
-      final quranAudio =
-          await IqroTajweedService.instance.resolveQuranWordAudio(arabicText);
-      if (gen != _playGeneration) return;
+    final bool isQuranSnippet = inQuran ||
+        arabicText.contains('○') ||
+        arabicText.contains('۝') ||
+        arabicText.contains('...') ||
+        arabicText.contains('…') ||
+        IqroTajweedService.instance.hasQuranSnippet(arabicText);
 
-      if (quranAudio != null && quranAudio.isNotEmpty) {
-        isPlayingNotifier.value = true;
-        final player = _ensurePlayer();
-        try {
+    // 1. If marked as inQuran or recognized Quran snippet, play authentic Qari (Sheikh Mahmoud Khalil Al-Husary)
+    if (isQuranSnippet) {
+      isPlayingNotifier.value = true;
+      final player = _ensurePlayer();
+      try {
+        final snippet =
+            await IqroTajweedService.instance.resolveSnippet(arabicText);
+        if (gen != _playGeneration) return;
+
+        if (snippet != null) {
+          // Precise recitation segment via EveryAyah (Al-Husary) and QuranTimingService
+          final surahTiming = await QuranTimingService.instance
+              .ensureSurahLoaded(snippet.surah);
+          if (gen != _playGeneration) return;
+
+          final ayahTiming = surahTiming?.getAyah(snippet.ayah);
+          final source = await VerseAudioPlayer.createAyahAudioSource(
+            snippet.surah,
+            snippet.ayah,
+          );
+          if (gen != _playGeneration) return;
+
+          int startMs = 0;
+          int endMs = 0;
+
+          if (ayahTiming != null && ayahTiming.words.isNotEmpty) {
+            final sIdx = (snippet.startWord ?? 0)
+                .clamp(0, ayahTiming.words.length - 1);
+            final eIdx = (snippet.endWord ?? (ayahTiming.words.length - 1))
+                .clamp(0, ayahTiming.words.length - 1);
+            startMs = ayahTiming.words[sIdx].startMs;
+            endMs = ayahTiming.words[eIdx].endMs;
+          }
+
+          AudioSource snippetSource = source;
+          if (endMs > startMs && source is UriAudioSource) {
+            snippetSource = ClippingAudioSource(
+              child: source,
+              start: Duration(milliseconds: startMs),
+              end: Duration(milliseconds: endMs),
+            );
+          }
+
+          await player.setAudioSources([snippetSource]);
+          await player.setSpeed(tempoNotifier.value);
+          if (gen != _playGeneration) return;
+          await player.play();
+          return;
+        }
+
+        // Secondary fallback: word-by-word or known Ayah audio
+        final quranAudio =
+            await IqroTajweedService.instance.resolveQuranWordAudio(arabicText);
+        if (gen != _playGeneration) return;
+
+        if (quranAudio != null && quranAudio.isNotEmpty) {
           if (quranAudio.startsWith('http')) {
             await player.setUrl(quranAudio);
           } else {
@@ -185,14 +240,17 @@ class IqroAudioService {
           if (gen != _playGeneration) return;
           await player.play();
           return;
-        } catch (e) {
-          debugPrint('[IqroAudioService] Qari audio error, falling back: $e');
-        } finally {
-          if (gen == _playGeneration) {
-            isPlayingNotifier.value = false;
-          }
+        }
+      } catch (e) {
+        debugPrint('[IqroAudioService] Qari audio error: $e');
+      } finally {
+        if (gen == _playGeneration) {
+          isPlayingNotifier.value = false;
         }
       }
+
+      // CRITICAL: Quranic verses must NEVER fall through to robot Indonesian TTS!
+      return;
     }
 
     if (gen != _playGeneration) return;

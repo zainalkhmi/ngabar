@@ -153,7 +153,7 @@ class QuranApp extends StatelessWidget {
           navigatorKey: QuranApp.navigatorKey,
           debugShowCheckedModeBanner: false,
           navigatorObservers: [AppModalRouteObserver.instance],
-          title: 'ngabar',
+          title: 'Mi-Qro',
           theme: ThemeData(
             useMaterial3: true,
             brightness: isDark ? Brightness.dark : Brightness.light,

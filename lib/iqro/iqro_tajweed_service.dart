@@ -1,8 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
+/// Precise verse and word boundary model for authentic Quran snippet recitation.
+class QuranSnippetAudio {
+  final int surah;
+  final int ayah;
+  final int? startWord;
+  final int? endWord;
+  final String? mushafText;
+
+  const QuranSnippetAudio({
+    required this.surah,
+    required this.ayah,
+    this.startWord,
+    this.endWord,
+    this.mushafText,
+  });
+}
 
 /// Tajweed rule classification model adhering to Tarteel QUL tajweed_words specifications
 /// and traditional Iqro' curriculum (Iqro' 4, 5, 6).
@@ -29,7 +47,7 @@ class IqroTajweedRule {
 }
 
 /// Service providing Tajweed rule detection and authentic Qari word audio lookup
-/// powered by QuranCDN / Tarteel QUL audio files.
+/// powered by QuranCDN / EveryAyah / Tarteel QUL audio files.
 class IqroTajweedService {
   IqroTajweedService._();
   static final IqroTajweedService instance = IqroTajweedService._();
@@ -212,6 +230,64 @@ class IqroTajweedService {
     return null;
   }
 
+  /// In-memory lookup map of frequently used Quranic phrases/words in Iqro' to Quran verse audio.
+  /// Format: 'normalized_arabic_keywords': 'surah:ayah'
+  static final Map<String, String> _knownAyahAudioMap = {
+    // Iqro 6 Pages 15 - 30 Ayah snippets
+    'ونخرج له يوم القيمة': '17:13',
+    'من ماء صديد': '14:16',
+    'يوم لا يغني عنهم كيدهم': '52:46',
+    'فليعمل عملا صلحا': '18:110',
+    'قول معروف ومغفرة': '2:263',
+    'ذرية ضعفاء': '4:9',
+    'وان جاهداك على ان تشرك بي': '31:15',
+    'علم فلا تطعهما': '31:15',
+    'سبيل من اناب الي': '31:15',
+    'يا بني انها ان تك مثقال حبة': '31:16',
+    'من خردل فتكن في صخرة': '31:16',
+    'الارض يات بها الله': '31:16',
+    'يا بني اقم الصلاة وامر بالمعروف': '31:17',
+    'عن المنكر واصبر على ما اصابك': '31:17',
+    'من عزم الامور': '31:17',
+    'ولا تصعر خدك للناس': '31:18',
+    'ولا تمش في الارض مرحا': '31:18',
+    'مختال فخور': '31:18',
+    'واقصد في مشيك واغضض': '31:19',
+    'من صوتك ان انكر الاصوات': '31:19',
+    'امن الرسول بما انزل اليه': '2:285',
+    'كل امن بالله وملائكته': '2:285',
+    'بين احد من رسله': '2:285',
+    'غفرانك ربنا واليك المصير': '2:285',
+    'لا يكلف الله نفسا الا وسعها': '2:286',
+    'ما اكتسبت ربنا لا تؤاخذنا': '2:286',
+    'اخطانا ربنا ولا تحمل علينا اصرا': '2:286',
+    'حملته على الذين من قبلنا': '2:286',
+    'ما لا طاقة لنا به واعف عنا': '2:286',
+    'وارحمنا انت مولانا فانصرنا': '2:286',
+    'وبرا بوالدتي ولم يجعلني جبارا شقيا': '19:32',
+    'لهم عذاب شديد والله عزيز ذو انتقام': '3:4',
+    'لا تفسدوا في الارض قالوا انما نحن مصلحون': '2:11',
+    'ولو كنت فظا غليظ القلب لانفضوا من حولك': '3:159',
+    'ان تعتدوا وتعاونوا على البر والتقوى': '5:2',
+    'كداب ال فرعون والذين من قبلهم': '3:11',
+    'انا نحن نزلنا الذكر وانا له لحافظون': '15:9',
+    'وممن حولكم من الاعراب منافقون': '9:101',
+    'اهل المدينة مردوا على النفاق لا تعلمهم': '9:101',
+    'في قلوبهم مرض فزادهم الله مرضا': '2:10',
+    'ولهم عذاب اليم بما كانوا يكذبون': '2:10',
+    'وما ياتيهم من رسول الا كانوا به يستهزءون': '15:11',
+    'لا اكراه في الدين قد تبين الرشد من الغي': '2:256',
+    'قانتات تائبات عابدات سائحات': '66:5',
+    'بسم الله الرحمن الرحيم': '1:1',
+    'ذلك الكتاب لا ريب فيه هدى للمتقين': '2:2',
+    'ولقد اتينا لقمان الحكمة': '31:12',
+    'فانما يشكر لنفسه': '31:12',
+    'واذ قال لقمان لابنه وهو يعظه': '31:13',
+    'بالله ان الشرك لظلم عظيم': '31:13',
+    'بوالديه حملته امه وهنا على وهن': '31:14',
+    'في عامين ان اشكر لي ولوالديك': '31:14',
+  };
+
   /// In-memory lookup map of frequently used Quranic words in Iqro' to QuranCDN WBW audio.
   /// Format: 'normalized_arabic': 'surah_ayah_word'
   static final Map<String, String> _knownWbwAudioMap = {
@@ -282,22 +358,86 @@ class IqroTajweedService {
 
   /// Clean Arabic word to key for audio lookup
   String _cleanKey(String text) {
-    return text.replaceAll(RegExp(r'[\s=\.\,\-\–]'), '').trim();
+    return text.replaceAll(RegExp(r'[\s=\.\,\-\–○\u06DD]'), '').trim();
   }
 
-  /// Resolves authentic word-by-word Quran recitation audio for an Arabic word.
-  /// First checks local disk cache, then in-memory map, then Quran.com API search.
-  /// Returns a local file path or streamable QuranCDN URL, or null if unresolvable.
+  /// Normalizes Arabic text by removing tashkeel and unifying letter variations
+  String _normalizeForMatch(String text) {
+    final sb = StringBuffer();
+    for (final rune in text.runes) {
+      if ((rune >= 0x064B && rune <= 0x065F) ||
+          rune == 0x0670 ||
+          rune == 0x0640 ||
+          (rune >= 0x06D6 && rune <= 0x06ED) ||
+          rune == 0x06E2 ||
+          rune == 0x25CB /* ○ */ ||
+          rune == 0x06DD /* End of Ayah */) {
+        continue;
+      }
+      switch (rune) {
+        case 0x0621:
+        case 0x0622:
+        case 0x0623:
+        case 0x0625:
+        case 0x0671:
+        case 0x0649:
+          sb.write('ا');
+          break;
+        case 0x0629:
+          sb.write('ت');
+          break;
+        case 0x0624:
+          sb.write('و');
+          break;
+        case 0x0626:
+        case 0x06CC:
+          sb.write('ي');
+          break;
+        case 0x06A9:
+          sb.write('ك');
+          break;
+        case 0x06C1:
+          sb.write('ه');
+          break;
+        default:
+          if ((rune >= 0x0621 && rune <= 0x064A) || rune == 0x20) {
+            sb.writeCharCode(rune);
+          }
+      }
+    }
+    return sb.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Resolves authentic Qari Ayah recitation audio (EveryAyah Al-Husary)
+  /// or word-by-word Quran audio for an Arabic phrase.
+  /// Returns a streamable URL or local cached MP3 path.
   Future<String?> resolveQuranWordAudio(String arabicText) async {
     final clean = _cleanKey(arabicText);
     if (clean.isEmpty) return null;
 
-    // Check if we have a direct mapped identifier
+    final normPhrase = _normalizeForMatch(arabicText);
+
+    // 1. Check known Ayah phrases map (e.g. Iqro 6 pages 15-30)
+    for (final entry in _knownAyahAudioMap.entries) {
+      if (normPhrase.contains(entry.key) || entry.key.contains(normPhrase)) {
+        final parts = entry.value.split(':');
+        final surah = int.tryParse(parts[0]) ?? 1;
+        final ayah = int.tryParse(parts[1]) ?? 1;
+        final sStr = surah.toString().padLeft(3, '0');
+        final aStr = ayah.toString().padLeft(3, '0');
+        final ayahUrl = 'https://everyayah.com/data/Husary_64kbps/$sStr$aStr.mp3';
+        return ayahUrl;
+      }
+    }
+
+    // 2. Direct single-word mapped identifier
     String? wbwId = _knownWbwAudioMap[clean];
 
-    // If not in static map, try looking up via Quran.com search API if online
+    // 3. Online Quran.com API lookup for matching verse/word
     if (wbwId == null) {
-      wbwId = await _queryQuranWbwId(clean);
+      final (ayahUrl, lookedWbwId) = await _queryQuranAudioLocation(clean, normPhrase);
+      if (ayahUrl != null) return ayahUrl;
+      wbwId = lookedWbwId;
     }
 
     if (wbwId == null) return null;
@@ -339,11 +479,15 @@ class IqroTajweedService {
     return cdnUrl;
   }
 
-  /// Queries Quran.com API v4 for word location (surah_ayah_word)
-  Future<String?> _queryQuranWbwId(String arabicWord) async {
+  /// Queries Quran.com API v4 for verse location, returning Ayah audio URL or WBW id.
+  Future<(String? ayahUrl, String? wbwId)> _queryQuranAudioLocation(
+    String arabicWord,
+    String normPhrase,
+  ) async {
     try {
+      final queryText = normPhrase.isNotEmpty ? normPhrase : arabicWord;
       final uri = Uri.parse(
-        'https://api.quran.com/api/v4/search?q=${Uri.encodeComponent(arabicWord)}&size=1',
+        'https://api.quran.com/api/v4/search?q=${Uri.encodeComponent(queryText)}&size=1',
       );
       final res = await http.get(uri).timeout(const Duration(seconds: 2));
       if (res.statusCode == 200) {
@@ -351,18 +495,168 @@ class IqroTajweedService {
         final results = data['search']?['results'] as List?;
         if (results != null && results.isNotEmpty) {
           final first = results.first;
-          final verseKey = first['verse_key'] as String?; // e.g. "1:1"
+          final verseKey = first['verse_key'] as String?; // e.g. "17:13"
           if (verseKey != null && verseKey.contains(':')) {
             final parts = verseKey.split(':');
             final surah = int.tryParse(parts[0]) ?? 1;
             final ayah = int.tryParse(parts[1]) ?? 1;
             final sStr = surah.toString().padLeft(3, '0');
             final aStr = ayah.toString().padLeft(3, '0');
-            return '${sStr}_${aStr}_001';
+            // If phrase contains >= 2 words, prefer full authentic Qari Ayah audio (EveryAyah Al-Husary)
+            if (normPhrase.contains(' ')) {
+              return ('https://everyayah.com/data/Husary_64kbps/$sStr$aStr.mp3', null);
+            }
+            return (null, '${sStr}_${aStr}_001');
           }
         }
       }
     } catch (_) {}
+    return (null, null);
+  }
+
+  Map<String, List<dynamic>>? _snippetMap;
+  Future<void>? _loadingSnippetFuture;
+
+  /// Ensures offline pre-compiled Quran snippet mappings are loaded into memory.
+  Future<void> ensureLoaded() async {
+    if (_snippetMap != null) return;
+    if (_loadingSnippetFuture != null) {
+      await _loadingSnippetFuture;
+      return;
+    }
+    _loadingSnippetFuture = _loadSnippetMapping();
+    await _loadingSnippetFuture;
+  }
+
+  Future<void> _loadSnippetMapping() async {
+    try {
+      final jsonStr = await rootBundle.loadString(
+        'assets/iqro/iqro_quran_snippets.json',
+        cache: false,
+      );
+      final Map<String, dynamic> raw = jsonDecode(jsonStr);
+      final Map<String, List<dynamic>> map = {};
+      for (final entry in raw.entries) {
+        if (entry.value is List) {
+          map[entry.key] = entry.value as List<dynamic>;
+        }
+      }
+      _snippetMap = map;
+    } catch (e) {
+      debugPrint('[IqroTajweedService] Error loading snippet map: $e');
+      _snippetMap = {};
+    }
+  }
+
+  /// Normalizes Arabic text for deterministic snippet matching:
+  /// Strips harakat, tatweel, waqaf circles, dots, dashes, and unifies letter variants.
+  String normalizeForSnippet(String text) {
+    if (text.isEmpty) return '';
+    final sb = StringBuffer();
+    for (final rune in text.runes) {
+      if ((rune >= 0x064B && rune <= 0x065F) ||
+          rune == 0x0640 ||
+          (rune >= 0x06D6 && rune <= 0x06ED) ||
+          rune == 0x06E2 ||
+          rune == 0x0653 ||
+          rune == 0x0654 ||
+          rune == 0x0655 ||
+          rune == 0x06DF ||
+          rune == 0x06E0 ||
+          rune == 0x06E1 ||
+          rune == 0x25CB /* ○ */ ||
+          rune == 0x06DD /* End of Ayah */ ||
+          rune == 0x002E /* . */ ||
+          rune == 0x2026 /* … */ ||
+          rune == 0x002C /* , */ ||
+          rune == 0x002D /* - */ ||
+          rune == 0x2013 /* – */ ||
+          rune == 0x2014 /* — */ ||
+          rune == 0x0020 /* space */) {
+        continue;
+      }
+      switch (rune) {
+        case 0x0670: // Dagger alif
+        case 0x0621:
+        case 0x0622:
+        case 0x0623:
+        case 0x0625:
+        case 0x0671:
+        case 0x0649:
+          sb.write('ا');
+          break;
+        case 0x0629:
+          sb.write('ت');
+          break;
+        case 0x0624:
+          sb.write('و');
+          break;
+        case 0x0626:
+        case 0x06CC:
+          sb.write('ي');
+          break;
+        case 0x06A9:
+          sb.write('ك');
+          break;
+        case 0x06C1:
+          sb.write('ه');
+          break;
+        default:
+          if (rune >= 0x0621 && rune <= 0x064A) {
+            sb.writeCharCode(rune);
+          }
+      }
+    }
+    return sb.toString();
+  }
+
+  /// Synchronous snippet check (if map is already in memory).
+  QuranSnippetAudio? resolveSnippetSync(String text) {
+    final clean = normalizeForSnippet(text);
+    if (clean.length < 3 || _snippetMap == null) return null;
+
+    final direct = _snippetMap![clean];
+    if (direct != null && direct.length >= 4) {
+      return QuranSnippetAudio(
+        surah: (direct[0] as num).toInt(),
+        ayah: (direct[1] as num).toInt(),
+        startWord: (direct[2] as num).toInt(),
+        endWord: (direct[3] as num).toInt(),
+        mushafText: direct.length > 4 ? direct[4]?.toString() : null,
+      );
+    }
+
+    // Substring match
+    for (final entry in _snippetMap!.entries) {
+      if (entry.key.length >= 6 &&
+          (entry.key.contains(clean) || clean.contains(entry.key))) {
+        final val = entry.value;
+        return QuranSnippetAudio(
+          surah: (val[0] as num).toInt(),
+          ayah: (val[1] as num).toInt(),
+          startWord: (val[2] as num).toInt(),
+          endWord: (val[3] as num).toInt(),
+          mushafText: val.length > 4 ? val[4]?.toString() : null,
+        );
+      }
+    }
     return null;
+  }
+
+  /// Asynchronous resolution ensuring the snippet database is loaded.
+  Future<QuranSnippetAudio?> resolveSnippet(String text) async {
+    await ensureLoaded();
+    return resolveSnippetSync(text);
+  }
+
+  /// Returns true if [text] is recognized as a Quranic snippet.
+  bool hasQuranSnippet(String text) {
+    if (text.contains('○') ||
+        text.contains('۝') ||
+        text.contains('...') ||
+        text.contains('…')) {
+      return true;
+    }
+    return resolveSnippetSync(text) != null;
   }
 }

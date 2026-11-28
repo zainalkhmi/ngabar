@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../core/highlighting_controller.dart';
@@ -77,6 +78,9 @@ class _TrackingScreenState extends State<TrackingScreen>
   AppBannerInfo? _lastBanner;
   int? _lastAyah;
   int? _lastSurah;
+  Timer? _autoTalqinTimer;
+  int _lastProgressWordKey = -1;
+  int _lastTalqinWordKey = -1;
   late final Listenable _screenThemeLanguageListenable;
   late final Listenable _bottomBarListenable;
 
@@ -98,6 +102,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       app.modeNotifier,
       app.iqroModeNotifier,
       app.iqroPositionNotifier,
+      app.autoTalqinNotifier,
       _surahNotifier,
       MaglisController.instance.sessionListenable,
       ScreenRecordingService.instance.isRecordingNotifier,
@@ -204,6 +209,11 @@ class _TrackingScreenState extends State<TrackingScreen>
               widget.controller.activeAyah.value ??
               1;
       _lastAyah = targetAyah;
+      _lastTalqinWordKey = -1;
+      _scheduleAutoTalqinCheck(forceReset: true);
+    } else if (!widget.isRecording && oldWidget.isRecording) {
+      _autoTalqinTimer?.cancel();
+      _autoTalqinTimer = null;
     }
 
     if (widget.isVoiceSearching && !oldWidget.isVoiceSearching) {
@@ -230,7 +240,75 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  void _scheduleAutoTalqinCheck({bool forceReset = false}) {
+    final app = AppState.instance;
+    if (!widget.isRecording ||
+        app.isIqroMode ||
+        !app.autoTalqinEnabled ||
+        MaglisController.instance.inSession) {
+      _autoTalqinTimer?.cancel();
+      return;
+    }
+
+    final int s = widget.controller.targetSurah > 0
+        ? widget.controller.targetSurah
+        : app.lastSurah;
+    final int a = widget.controller.activeAyah.value ?? app.lastAyah;
+    final int w = widget.controller.activeWordIndex ?? 0;
+    final int key = QuranCoordinate.packWordKey(s, a, w);
+
+    if (!forceReset && key == _lastProgressWordKey && _autoTalqinTimer != null) {
+      return;
+    }
+    _lastProgressWordKey = key;
+    if (forceReset || key != _lastTalqinWordKey) {
+      _lastTalqinWordKey = -1;
+    }
+
+    _autoTalqinTimer?.cancel();
+    _autoTalqinTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted ||
+          !widget.isRecording ||
+          !AppState.instance.autoTalqinEnabled ||
+          QuranAudioService.instance.isPlaying) {
+        return;
+      }
+
+      int targetS = widget.controller.targetSurah > 0
+          ? widget.controller.targetSurah
+          : AppState.instance.lastSurah;
+      int targetA =
+          widget.controller.activeAyah.value ?? AppState.instance.lastAyah;
+      int nextW = (widget.controller.activeWordIndex ?? -1) + 1;
+
+      final verse = widget.controller.repository.getVerse(targetS, targetA);
+      if (verse != null && nextW >= verse.uthmaniWords.length) {
+        final maxAyahs = QuranMetadata.getAyahCount(targetS);
+        if (targetA < maxAyahs) {
+          targetA++;
+          nextW = 0;
+        } else if (targetS < 114) {
+          targetS++;
+          targetA = 1;
+          nextW = 0;
+        }
+      }
+
+      final int talqinKey =
+          QuranCoordinate.packWordKey(targetS, targetA, nextW);
+      if (talqinKey == _lastTalqinWordKey) return;
+      _lastTalqinWordKey = talqinKey;
+
+      unawaited(QuranAudioService.instance.playWord(
+        surah: targetS,
+        ayah: targetA,
+        wordIndex: nextW,
+      ));
+    });
+  }
+
   void _onControllerUpdate() {
+    _scheduleAutoTalqinCheck();
     if (widget.controller.targetSurah != _lastSurah) {
       final newSurah = widget.controller.targetSurah;
       _surahNotifier.value = newSurah;
@@ -431,6 +509,97 @@ class _TrackingScreenState extends State<TrackingScreen>
                       // Main Verse Content (Mushaf View or Verse List View - preserved across auto-scroll toggles)
                       if (verseContentChild != null) verseContentChild,
 
+                      // Accessible Hands-Free / Auto-Talqin Top Control Strip
+                      if (!app.isIqroMode)
+                        ValueListenableBuilder<bool>(
+                          valueListenable: app.autoTalqinNotifier,
+                          builder: (context, isTalqinOn, _) {
+                            if (!isTalqinOn) return const SizedBox.shrink();
+                            final topPad = MediaQuery.of(context).padding.top;
+                            return Positioned(
+                              top: topPad + 8,
+                              left: 14,
+                              right: 14,
+                              child: Semantics(
+                                button: true,
+                                label: widget.isRecording
+                                    ? 'Auto-Talqin aktif. Ketuk untuk jeda rekaman, ketuk dua kali untuk dengar kata berikutnya.'
+                                    : 'Auto-Talqin siap. Ketuk untuk mulai membaca tanpa melihat mushaf.',
+                                child: GestureDetector(
+                                  onTap: () {
+                                    CamcorderSoundHelper.instance
+                                        .playRecordChime(
+                                      isStart: !widget.isRecording,
+                                    );
+                                    widget.onToggleRecord();
+                                  },
+                                  onDoubleTap: () {
+                                    final int s =
+                                        widget.controller.targetSurah > 0
+                                            ? widget.controller.targetSurah
+                                            : app.lastSurah;
+                                    final int a =
+                                        widget.controller.activeAyah.value ??
+                                            app.lastAyah;
+                                    final int nextW =
+                                        (widget.controller.activeWordIndex ??
+                                                -1) +
+                                            1;
+                                    unawaited(
+                                        QuranAudioService.instance.playWord(
+                                      surah: s,
+                                      ayah: a,
+                                      wordIndex: nextW.clamp(0, 200),
+                                    ));
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: (widget.isRecording
+                                              ? const Color(0xFF065F46)
+                                              : const Color(0xFF0F172A))
+                                          .withValues(alpha: 0.90),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: const Color(0xFF10B981)
+                                            .withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.hearing_rounded,
+                                          color: Color(0xFF34D399),
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            widget.isRecording
+                                                ? 'Auto-Talqin Aktif • Ketuk: Jeda | Ketuk 2x: Bantu Kata'
+                                                : 'Mode Auto-Talqin • Ketuk di sini untuk Mulai Baca',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontFamily: 'cairo',
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
                       // Bottom Action Bar (Unified Glassmorphic Command Dock)
                       // Disappears during auto-scroll for zero-distraction teleprompter reading!
                       AnimatedPositioned(
@@ -507,6 +676,21 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 onIqroTap: () {
                                   app.dismissBanner();
                                   IqroPickerSheet.show(context);
+                                },
+                                isAutoTalqin: app.autoTalqinEnabled,
+                                onToggleAutoTalqin: () {
+                                  final next = !app.autoTalqinEnabled;
+                                  app.setAutoTalqinEnabled(next);
+                                  SemanticsService.sendAnnouncement(
+                                    View.of(context),
+                                    next
+                                        ? 'Auto-Talqin aktif. Ketuk dua kali untuk mulai atau jeda.'
+                                        : 'Auto-Talqin dimatikan.',
+                                    TextDirection.ltr,
+                                  );
+                                  if (next) {
+                                    _scheduleAutoTalqinCheck(forceReset: true);
+                                  }
                                 },
                                 onSettingsTap: () {
                                   _showSettingsDialog();

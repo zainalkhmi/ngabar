@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/app_state.dart';
 import '../../../core/subscription_service.dart';
 
-/// Tarteel-inspired Premium Paywall sheet with Google Play Billing
-/// (Android/iOS) and QRIS fallback (Web / direct APK).
+/// Tarteel-inspired Premium Paywall compliant with Google Play Billing
+/// and Apple App Store (StoreKit) guidelines, localized in ID / EN / AR.
 class SubscriptionPaywallSheet extends StatefulWidget {
   const SubscriptionPaywallSheet({super.key});
 
@@ -33,9 +35,37 @@ class _SubscriptionPaywallSheetState extends State<SubscriptionPaywallSheet> {
         ? SubscriptionService.yearlyProductId
         : SubscriptionService.monthlyProductId;
 
+    if (kIsWeb) {
+      setState(() => _showQrisFallback = true);
+      return;
+    }
+
     final launchedStore = await sub.purchaseStorePlan(productId);
     if (!launchedStore && mounted) {
-      setState(() => _showQrisFallback = true);
+      // On Android / iOS, never bypass IAP with external payment links.
+      // Prompt user / retry loading store catalog instead.
+      await sub.reloadProducts();
+      if (mounted && sub.productFor(productId) == null) {
+        final app = AppState.instance;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              app.isIndonesian
+                  ? 'Produk langganan Store belum tersedia. Pastikan akun Store aktif atau coba lagi.'
+                  : (app.isArabic
+                      ? 'منتج الاشتراك غير متاح حالياً في المتجر.'
+                      : 'Store subscription product is unavailable right now. Please try again.'),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openPolicyUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -44,6 +74,9 @@ class _SubscriptionPaywallSheetState extends State<SubscriptionPaywallSheet> {
     final sub = SubscriptionService.instance;
     final app = AppState.instance;
     final isDark = app.isDarkMode;
+    final isId = app.isIndonesian;
+    final isAr = app.isArabic;
+    final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
     return ListenableBuilder(
       listenable: Listenable.merge([
@@ -56,9 +89,30 @@ class _SubscriptionPaywallSheetState extends State<SubscriptionPaywallSheet> {
         final monthlyProd =
             sub.productFor(SubscriptionService.monthlyProductId);
 
-        final yearlyPrice = yearlyProd?.price ?? 'Rp 199.000';
-        final monthlyPrice = monthlyProd?.price ?? 'Rp 29.000';
+        final defaultYearly = isId ? 'Rp 199.000' : r'$19.99';
+        final defaultMonthly = isId ? 'Rp 29.000' : r'$2.99';
+        final defaultStrike = isId ? 'Rp 348.000' : r'$35.88';
+        final defaultMonthlyEq = isId ? 'Rp 16.583' : r'$1.67';
+
+        final yearlyPrice = yearlyProd?.price ?? defaultYearly;
+        final monthlyPrice = monthlyProd?.price ?? defaultMonthly;
         final isBusy = sub.isBusyNotifier.value;
+
+        final storeName = isIos ? 'App Store' : 'Google Play';
+
+        final titleText = isAr
+            ? 'الترقية إلى\nبريميوم'
+            : (isId ? 'UPGRADE KE\nPREMIUM' : 'UPGRADE TO\nPREMIUM');
+        final subtitleText = isAr
+            ? 'احفظ واتلُ\nبشكل أسرع'
+            : (isId
+                ? 'HAFALKAN & NGAJI\nLEBIH BANYAK'
+                : 'MEMORIZE & RECITE\nMORE QURAN');
+        final descText = isAr
+            ? 'يساعدك اشتراك نجابار بريميوم على حفظ القرآن ومراجعته وتعلم اقرأ بدقة وسرعة أكبر!'
+            : (isId
+                ? "Ngabar Premium membantu Anda menghafal, murojaah Al-Qur'an, dan belajar Iqro' lebih cepat dan akurat!"
+                : 'Ngabar Premium helps you memorize, review the Quran, and master Iqro faster with real-time AI!');
 
         return Container(
           constraints: BoxConstraints(
@@ -71,316 +125,417 @@ class _SubscriptionPaywallSheetState extends State<SubscriptionPaywallSheet> {
           child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
             child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Top Tarteel-style emerald/teal gradient hero banner
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0E7490),
-                          Color(0xFF10B981),
-                        ],
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Text(
-                                        'UPGRADE KE\nPREMIUM',
-                                        style: TextStyle(
-                                          fontFamily: 'cairo',
-                                          fontSize: 22,
-                                          height: 1.15,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Icon(
-                                        Icons.star_rounded,
-                                        color: Color(0xFFFACC15),
-                                        size: 28,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'HAFALKAN & NGAJI\nLEBIH BANYAK',
-                                    style: TextStyle(
-                                      fontFamily: 'cairo',
-                                      fontSize: 13.5,
-                                      height: 1.2,
-                                      fontWeight: FontWeight.w700,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.92),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.16),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.bolt_rounded,
-                                size: 44,
-                                color: Color(0xFFA7F3D0),
-                              ),
-                            ),
+              child: Directionality(
+                textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Top Tarteel-style emerald/teal gradient hero banner
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF0E7490),
+                            Color(0xFF10B981),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
-                    child: _showQrisFallback
-                        ? _buildQrisFallback(
-                            isDark: isDark,
-                            price: _isYearly ? yearlyPrice : monthlyPrice,
-                            planLabel:
-                                _isYearly ? 'Tahunan (1 Tahun)' : 'Bulanan',
-                            sub: sub,
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text(
-                                "Ngabar Premium membantu Anda menghafal, murojaah Al-Qur'an, dan belajar Iqro' lebih cepat dan akurat!",
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  fontSize: 13,
-                                  height: 1.4,
-                                  color: isDark
-                                      ? const Color(0xFFCBD5E1)
-                                      : const Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-
-                              // Annual Plan Card (Hemat 43% - Paling Hemat)
-                              _PlanCard(
-                                headerText: 'Hemat 43% - Ditagih Tahunan',
-                                headerActiveColor: const Color(0xFF34D399),
-                                isSelected: _isYearly,
-                                isDark: isDark,
-                                badgeText: 'Paling Hemat',
-                                strikePrice: 'Rp 348.000',
-                                mainPrice: '$yearlyPrice Per Tahun',
-                                subPrice: 'Rp 16.583 Per Bulan',
-                                onTap: () => setState(() => _isYearly = true),
-                              ),
-                              const SizedBox(height: 12),
-
-                              // Monthly Plan Card
-                              _PlanCard(
-                                headerText: 'Ditagih Bulanan',
-                                headerActiveColor: const Color(0xFF34D399),
-                                isSelected: !_isYearly,
-                                isDark: isDark,
-                                mainPrice: '$monthlyPrice Per Bulan',
-                                onTap: () => setState(() => _isYearly = false),
-                              ),
-
-                              const SizedBox(height: 14),
-
-                              // Premium Benefits summary
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF131C26)
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.08)
-                                        : Colors.black.withValues(alpha: 0.06),
-                                  ),
-                                ),
+                              Expanded(
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _BenefitRow(
-                                      text:
-                                          'Deteksi Tajwid AI Real-Time & Evaluasi Suara',
-                                      isDark: isDark,
+                                    Row(
+                                      children: [
+                                        Text(
+                                          titleText,
+                                          style: const TextStyle(
+                                            fontFamily: 'cairo',
+                                            fontSize: 22,
+                                            height: 1.15,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Icon(
+                                          Icons.star_rounded,
+                                          color: Color(0xFFFACC15),
+                                          size: 28,
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 6),
-                                    _BenefitRow(
-                                      text:
-                                          'Rekam Layar & YouTube Live Connect',
-                                      isDark: isDark,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _BenefitRow(
-                                      text:
-                                          "Iqro' 3–6 AI, Mode Ujian & Buat Room Majlis",
-                                      isDark: isDark,
+                                    Text(
+                                      subtitleText,
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 13.5,
+                                        height: 1.2,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.92),
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-
-                              if (sub.lastError != null) ...[
-                                const SizedBox(height: 10),
-                                Text(
-                                  sub.lastError!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontFamily: 'cairo',
-                                    fontSize: 12,
-                                    color: Color(0xFFEF4444),
-                                  ),
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                  shape: BoxShape.circle,
                                 ),
-                              ],
-
-                              const SizedBox(height: 14),
-                              Center(
-                                child: Text(
-                                  sub.storeAvailable
-                                      ? 'Batalkan kapan saja melalui Play Store'
-                                      : 'Pembayaran via Play Store / QRIS Instan',
-                                  style: TextStyle(
-                                    fontFamily: 'cairo',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? const Color(0xFFE2E8F0)
-                                        : const Color(0xFF334155),
-                                  ),
+                                child: const Icon(
+                                  Icons.bolt_rounded,
+                                  size: 44,
+                                  color: Color(0xFFA7F3D0),
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
 
-                              // Primary Gradient LANGGANAN CTA
-                              GestureDetector(
-                                onTap: isBusy ? null : _onSubscribeTap,
-                                child: Container(
-                                  height: 50,
-                                  alignment: Alignment.center,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+                      child: (kIsWeb && _showQrisFallback)
+                          ? _buildQrisFallback(
+                              isDark: isDark,
+                              price: _isYearly ? yearlyPrice : monthlyPrice,
+                              planLabel: _isYearly
+                                  ? (isId ? 'Tahunan (1 Tahun)' : 'Annual')
+                                  : (isId ? 'Bulanan' : 'Monthly'),
+                              sub: sub,
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  descText,
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 13,
+                                    height: 1.4,
+                                    color: isDark
+                                        ? const Color(0xFFCBD5E1)
+                                        : const Color(0xFF475569),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Annual Plan Card
+                                _PlanCard(
+                                  headerText: isAr
+                                      ? 'وفر ٤٣٪ - يدفع سنوياً'
+                                      : (isId
+                                          ? 'Hemat 43% - Ditagih Tahunan'
+                                          : 'Save 43% - Billed Annually'),
+                                  headerActiveColor: const Color(0xFF34D399),
+                                  isSelected: _isYearly,
+                                  isDark: isDark,
+                                  badgeText: isAr
+                                      ? 'الأوفر'
+                                      : (isId ? 'Paling Hemat' : 'Best Value'),
+                                  strikePrice:
+                                      yearlyProd == null ? defaultStrike : null,
+                                  mainPrice: isAr
+                                      ? '$yearlyPrice / سنة'
+                                      : (isId
+                                          ? '$yearlyPrice Per Tahun'
+                                          : '$yearlyPrice / Year'),
+                                  subPrice: yearlyProd == null
+                                      ? (isId
+                                          ? '$defaultMonthlyEq Per Bulan'
+                                          : '$defaultMonthlyEq / Month')
+                                      : null,
+                                  onTap: () => setState(() => _isYearly = true),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Monthly Plan Card
+                                _PlanCard(
+                                  headerText: isAr
+                                      ? 'يدفع شهرياً'
+                                      : (isId
+                                          ? 'Ditagih Bulanan'
+                                          : 'Billed Monthly'),
+                                  headerActiveColor: const Color(0xFF34D399),
+                                  isSelected: !_isYearly,
+                                  isDark: isDark,
+                                  mainPrice: isAr
+                                      ? '$monthlyPrice / شهر'
+                                      : (isId
+                                          ? '$monthlyPrice Per Bulan'
+                                          : '$monthlyPrice / Month'),
+                                  onTap: () =>
+                                      setState(() => _isYearly = false),
+                                ),
+
+                                const SizedBox(height: 14),
+
+                                // Premium Benefits summary
+                                Container(
+                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF38BDF8),
-                                        Color(0xFF34D399),
-                                      ],
+                                    color: isDark
+                                        ? const Color(0xFF131C26)
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : Colors.black
+                                              .withValues(alpha: 0.06),
                                     ),
-                                    borderRadius: BorderRadius.circular(25),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF10B981)
-                                            .withValues(alpha: 0.35),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      _BenefitRow(
+                                        text: isAr
+                                            ? 'تتبع التجويد بالذكاء الاصطناعي وتقييم التلاوة'
+                                            : (isId
+                                                ? 'Deteksi Tajwid AI Real-Time & Evaluasi Suara'
+                                                : 'Real-Time AI Tajweed Tracking & Audio Review'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _BenefitRow(
+                                        text: isAr
+                                            ? 'تسجيل الشاشة والبث المباشر عبر يوتيوب'
+                                            : (isId
+                                                ? 'Rekam Layar & YouTube Live Connect'
+                                                : 'Screen Recording & YouTube Live Connect'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _BenefitRow(
+                                        text: isAr
+                                            ? 'اقرأ ٣-٦ بالذكاء الاصطناعي وإنشاء غرف المجلس'
+                                            : (isId
+                                                ? "Iqro' 3–6 AI, Mode Ujian & Buat Room Majlis"
+                                                : "Iqro' 3–6 AI, Exam Mode & Host Majlis Circles"),
+                                        isDark: isDark,
                                       ),
                                     ],
                                   ),
-                                  child: isBusy
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: Colors.black87,
+                                ),
+
+                                if (sub.lastError != null) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    sub.lastError!,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontFamily: 'cairo',
+                                      fontSize: 12,
+                                      color: Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 14),
+                                Center(
+                                  child: Text(
+                                    kIsWeb
+                                        ? (isId
+                                            ? 'Pembayaran Web via QRIS'
+                                            : 'Web Payment via QRIS')
+                                        : (isAr
+                                            ? 'يمكنك الإلغاء في أي وقت عبر $storeName'
+                                            : (isId
+                                                ? 'Batalkan kapan saja melalui $storeName'
+                                                : 'Cancel anytime via $storeName')),
+                                    style: TextStyle(
+                                      fontFamily: 'cairo',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? const Color(0xFFE2E8F0)
+                                          : const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+
+                                // Primary Gradient SUBSCRIBE CTA
+                                GestureDetector(
+                                  onTap: isBusy ? null : _onSubscribeTap,
+                                  child: Container(
+                                    height: 50,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF38BDF8),
+                                          Color(0xFF34D399),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(25),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF10B981)
+                                              .withValues(alpha: 0.35),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: isBusy
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: Colors.black87,
+                                            ),
+                                          )
+                                        : Text(
+                                            isAr
+                                                ? 'اشترك الآن'
+                                                : (isId
+                                                    ? 'LANGGANAN'
+                                                    : 'SUBSCRIBE'),
+                                            style: const TextStyle(
+                                              fontFamily: 'cairo',
+                                              fontSize: 15.5,
+                                              fontWeight: FontWeight.w900,
+                                              color: Color(0xFF0F172A),
+                                              letterSpacing: 0.8,
+                                            ),
                                           ),
-                                        )
-                                      : const Text(
-                                          'LANGGANAN',
+                                  ),
+                                ),
+
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (!kIsWeb)
+                                      TextButton(
+                                        onPressed: isBusy
+                                            ? null
+                                            : sub.restorePurchases,
+                                        child: Text(
+                                          isAr
+                                              ? 'استعادة المشتريات'
+                                              : (isId
+                                                  ? 'Pulihkan Pembelian'
+                                                  : 'Restore Purchases'),
                                           style: TextStyle(
                                             fontFamily: 'cairo',
-                                            fontSize: 15.5,
-                                            fontWeight: FontWeight.w900,
-                                            color: Color(0xFF0F172A),
-                                            letterSpacing: 0.8,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? const Color(0xFF94A3B8)
+                                                : const Color(0xFF64748B),
                                           ),
                                         ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (sub.storeAvailable)
+                                      ),
                                     TextButton(
-                                      onPressed:
-                                          isBusy ? null : sub.restorePurchases,
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
                                       child: Text(
-                                        'Pulihkan',
+                                        isAr
+                                            ? 'لاحقاً'
+                                            : (isId
+                                                ? 'LAIN KALI'
+                                                : 'NOT NOW'),
                                         style: TextStyle(
                                           fontFamily: 'cairo',
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // Apple & Google mandatory auto-renewal + policy links
+                                Text(
+                                  isAr
+                                      ? 'سيتم خصم المبلغ من حساب $storeName عند تأكيد الشراء. يتجدد الاشتراك تلقائياً ما لم يتم إلغاؤه قبل ٢٤ ساعة من نهاية الفترة الحالية.'
+                                      : (isId
+                                          ? 'Pembayaran akan ditagih ke akun $storeName Anda saat konfirmasi pembelian. Langganan diperpanjang otomatis kecuali dibatalkan minimal 24 jam sebelum akhir periode berjalan.'
+                                          : 'Payment will be charged to your $storeName account at confirmation of purchase. Subscription automatically renews unless canceled at least 24 hours before the end of the current period.'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 10.5,
+                                    height: 1.35,
+                                    color: isDark
+                                        ? const Color(0xFF64748B)
+                                        : const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => _openPolicyUrl(
+                                        'https://ngabar.vercel.app/terms',
+                                      ),
+                                      child: Text(
+                                        isId ? 'Ketentuan Layanan' : 'Terms of Use',
+                                        style: TextStyle(
+                                          fontFamily: 'cairo',
+                                          fontSize: 11,
+                                          decoration: TextDecoration.underline,
                                           color: isDark
                                               ? const Color(0xFF94A3B8)
                                               : const Color(0xFF64748B),
                                         ),
                                       ),
                                     ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(),
-                                    child: Text(
-                                      'LAIN KALI',
-                                      style: TextStyle(
-                                        fontFamily: 'cairo',
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: isDark
-                                            ? Colors.white
-                                            : const Color(0xFF1E293B),
+                                    const SizedBox(width: 14),
+                                    GestureDetector(
+                                      onTap: () => _openPolicyUrl(
+                                        'https://ngabar.vercel.app/privacy',
+                                      ),
+                                      child: Text(
+                                        isId ? 'Kebijakan Privasi' : 'Privacy Policy',
+                                        style: TextStyle(
+                                          fontFamily: 'cairo',
+                                          fontSize: 11,
+                                          decoration: TextDecoration.underline,
+                                          color: isDark
+                                              ? const Color(0xFF94A3B8)
+                                              : const Color(0xFF64748B),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-
-                              Text(
-                                'Pembayaran akan ditagih setelah mengonfirmasi pembelian. Langganan bulanan atau tahunan dapat dibatalkan kapan saja hingga 24 jam sebelum perpanjangan.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  fontSize: 10.5,
-                                  height: 1.35,
-                                  color: isDark
-                                      ? const Color(0xFF64748B)
-                                      : const Color(0xFF94A3B8),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ],
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -433,7 +588,7 @@ class _SubscriptionPaywallSheetState extends State<SubscriptionPaywallSheet> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Scan QRIS di atas melalui GoPay, OVO, DANA, ShopeePay, atau Mobile Banking. Setelah pembayaran berhasil, ketuk tombol konfirmasi.',
+          'Scan QRIS di atas melalui GoPay, OVO, DANA, ShopeePay, atau Mobile Banking.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'cairo',

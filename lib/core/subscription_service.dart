@@ -80,6 +80,29 @@ class SubscriptionService extends ChangeNotifier {
     }
   }
 
+  /// Re-queries Google Play / App Store product details if initial load failed.
+  Future<void> reloadProducts() async {
+    if (kIsWeb) return;
+    isBusyNotifier.value = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final iap = InAppPurchase.instance;
+      _storeAvailable = await iap.isAvailable();
+      if (_storeAvailable) {
+        final response = await iap.queryProductDetails(_productIds);
+        for (final p in response.productDetails) {
+          _products[p.id] = p;
+        }
+      }
+    } catch (e) {
+      _lastError = e.toString();
+    } finally {
+      isBusyNotifier.value = false;
+      notifyListeners();
+    }
+  }
+
   /// Starts Play Store / App Store subscription purchase for [productId].
   /// Returns `true` if the native store sheet was launched, `false` if unavailable
   /// (caller should show QRIS fallback).

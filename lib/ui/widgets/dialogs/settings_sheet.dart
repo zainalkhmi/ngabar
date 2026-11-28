@@ -346,8 +346,8 @@ class SettingsSheet extends StatelessWidget {
                                 children: [
                                   Text(
                                     isPremium
-                                        ? 'Ngabar Premium Aktif'
-                                        : 'Upgrade ke Ngabar Premium',
+                                        ? 'Mi-Qro Premium Aktif'
+                                        : 'Upgrade ke Mi-Qro Premium',
                                     style: const TextStyle(
                                       fontFamily: 'cairo',
                                       fontSize: 14,
@@ -739,6 +739,23 @@ class SettingsSheet extends StatelessWidget {
                               CamcorderSoundHelper.instance.playMistakeAlert();
                             }
                           },
+                        ),
+                      ),
+
+                      // 5b. Auto-Talqin (Bantu Saat Lupa)
+                      SettingDivider(c: c),
+                      SettingTile(
+                        icon: Icons.record_voice_over_rounded,
+                        title: isId
+                            ? 'Auto-Talqin (Bantu Saat Lupa)'
+                            : (isAr
+                                ? 'التلقين التلقائي عند التوقف'
+                                : 'Auto-Talqin (Prompt When Stuck)'),
+                        c: c,
+                        trailing: Switch.adaptive(
+                          value: app.autoTalqinEnabled,
+                          activeThumbColor: const Color(0xFF10B981),
+                          onChanged: (val) => app.setAutoTalqinEnabled(val),
                         ),
                       ),
 

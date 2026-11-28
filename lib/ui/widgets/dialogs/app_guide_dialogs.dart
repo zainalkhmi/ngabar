@@ -60,10 +60,10 @@ class _AppGuideDialogState extends State<AppGuideDialog> {
             ? 'Panduan Lengkap'
             : (isAr ? 'الدليل الشامل' : 'Complete Guide');
         final subtitle = isId
-            ? 'Fitur ngabar, tips membaca agar AI lancar, & cara perbaikan'
+            ? 'Fitur Mi-Qro, tips membaca agar AI lancar, & cara perbaikan'
             : (isAr
                 ? 'الميزات ونصائح القراءة لتجنب توقف التتبع'
-                : 'Features, anti-stuck reading tips & mistake recovery');
+                : 'Mi-Qro features, anti-stuck reading tips & mistake recovery');
 
         return AppModalHeader(
           title: title,
@@ -365,7 +365,7 @@ class _AppGuideDialogState extends State<AppGuideDialog> {
           accentColor: const Color(0xFF10B981),
           textAlign: TextAlign.start,
           text: isId
-              ? 'AI ngabar membaca bunyi huruf secara berurutan. Ikuti tips berikut agar pelacakan tetap cepat, akurat, dan tidak stuck:'
+              ? 'AI Mi-Qro membaca bunyi huruf secara berurutan. Ikuti tips berikut agar pelacakan tetap cepat, akurat, dan tidak stuck:'
               : (isAr
                   ? 'يتتبع الذكاء الاصطناعي الحروف بالتسلسل. اتبع هذه النصائح لضمان سلاسة التتبع:'
                   : 'The AI matches phonemes sequentially. Follow these tips to keep tracking smooth and prevent stalls:'),

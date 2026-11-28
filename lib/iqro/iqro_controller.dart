@@ -45,6 +45,7 @@ class IqroController extends ChangeNotifier {
   String _consumedNormalizedBuffer = '';
   int _consumedCompactLen = 0;
   int _lastMistakeOrderId = -1;
+  int _cellMismatchCount = 0;
   Timer? _mistakeDebounceTimer;
 
   int statusFor(int orderId) => _statuses[orderId] ?? IqroCellStatus.unread;
@@ -114,6 +115,7 @@ class IqroController extends ChangeNotifier {
     _consumedNormalizedBuffer = '';
     _consumedCompactLen = 0;
     _lastMistakeOrderId = -1;
+    _cellMismatchCount = 0;
     _isLoading = false;
     notifyListeners();
   }
@@ -126,6 +128,7 @@ class IqroController extends ChangeNotifier {
     final cell = data.content[index];
     _statuses.remove(cell.orderId);
     _lastMistakeOrderId = -1;
+    _cellMismatchCount = 0;
     _consumedNormalizedBuffer = '';
     _consumedCompactLen = 0;
     notifyListeners();
@@ -139,6 +142,7 @@ class IqroController extends ChangeNotifier {
     _consumedNormalizedBuffer = '';
     _consumedCompactLen = 0;
     _lastMistakeOrderId = -1;
+    _cellMismatchCount = 0;
     notifyListeners();
   }
 
@@ -205,7 +209,7 @@ class IqroController extends ChangeNotifier {
     bool matchedAny = false;
     while (_activeIndex < data.content.length && deltaCompact.isNotEmpty) {
       final targetCell = data.content[_activeIndex];
-      final targetWords = _getCellWords(targetCell.arabic);
+      final targetWords = _getCellWords(targetCell);
 
       // A. Try matching the entire cell (or alternative spellings separated by '=')
       final int wholeCellConsumed = _matchCell(deltaCompact, targetCell);
@@ -266,6 +270,7 @@ class IqroController extends ChangeNotifier {
     }
 
     if (matchedAny) {
+      _cellMismatchCount = 0;
       if (isPageCompleted || correctCount >= (data.content.length * 0.5).ceil()) {
         unawaited(IqroProgressService.instance.recordPageScore(
           data.jilid,
@@ -284,7 +289,7 @@ class IqroController extends ChangeNotifier {
     // Mismatch handling:
     // Never mark red on normal breath pauses or partial multi-word recitation.
     final targetCell = data.content[_activeIndex];
-    final targetWords = _getCellWords(targetCell.arabic);
+    final targetWords = _getCellWords(targetCell);
     final String currentTargetWord =
         (targetWords.length > 1 && _activeWordInCell < targetWords.length)
             ? targetWords[_activeWordInCell]
@@ -315,10 +320,33 @@ class IqroController extends ChangeNotifier {
       _lastMistakeOrderId = -1;
       _activeIndex++;
       _activeWordInCell = 0;
+      _cellMismatchCount = 0;
       _consumedNormalizedBuffer = '';
       _consumedCompactLen = 0;
       notifyListeners();
       return;
+    }
+
+    _cellMismatchCount++;
+    // Anti-stuck: If the user has recited 3+ times on this same cell and ASR
+    // partially recognizes it (>= 38% similarity or matching consonant bones),
+    // gracefully advance with success so the student is never stuck indefinitely.
+    if (_cellMismatchCount >= 3 && !_isExamMode && deltaCompact.isNotEmpty) {
+      final double sim = _similarity(sSkel, tSkel);
+      if (sim >= 0.38 ||
+          (sCons.isNotEmpty &&
+              tCons.isNotEmpty &&
+              (sCons.contains(tCons) || tCons.contains(sCons)))) {
+        _recordCellSuccess(data.jilid, targetCell);
+        _lastMistakeOrderId = -1;
+        _activeIndex++;
+        _activeWordInCell = 0;
+        _cellMismatchCount = 0;
+        _consumedNormalizedBuffer = '';
+        _consumedCompactLen = 0;
+        notifyListeners();
+        return;
+      }
     }
 
     final bool hasSubstantialWrongSpeech =
@@ -387,31 +415,40 @@ class IqroController extends ChangeNotifier {
   }
 
   /// Extracts words from cell Arabic text for word-by-word matching.
-  static List<String> _getCellWords(String arabic) {
-    final primary = arabic.split(RegExp(r'[=/]'))[0];
+  /// If cell is in Quran and has authentic Mushaf text, prioritizes the Mushaf's words!
+  static List<String> _getCellWords(IqroCellData cell) {
+    final text = (cell.inQuran &&
+            cell.mushafArabic != null &&
+            cell.mushafArabic!.isNotEmpty)
+        ? cell.mushafArabic!
+        : cell.arabic;
+    final primary = text.split(RegExp(r'[=/]'))[0];
     final norm = _normalizeArabic(primary);
     return norm.split(' ').where((w) => w.isNotEmpty).toList();
   }
 
   /// Extracts alternative spellings if cell contains '=' or '/'.
-  static List<String> _getCellTargetOptions(String arabic) {
-    if (!arabic.contains('=') && !arabic.contains('/')) {
-      final norm = _normalizeArabic(arabic);
-      return norm.isNotEmpty ? [norm] : [];
-    }
-    final rawOptions = arabic.split(RegExp(r'[=/]'));
+  /// Also includes authentic Mushaf Uthmani text if available.
+  static List<String> _getCellTargetOptions(IqroCellData cell) {
     final List<String> result = [];
+    if (cell.inQuran &&
+        cell.mushafArabic != null &&
+        cell.mushafArabic!.isNotEmpty) {
+      final normMushaf = _normalizeArabic(cell.mushafArabic!);
+      if (normMushaf.isNotEmpty) result.add(normMushaf);
+    }
+    final rawOptions = cell.arabic.split(RegExp(r'[=/]'));
     for (final opt in rawOptions) {
       final norm = _normalizeArabic(opt);
-      if (norm.isNotEmpty) result.add(norm);
+      if (norm.isNotEmpty && !result.contains(norm)) result.add(norm);
     }
-    return result.isNotEmpty ? result : [_normalizeArabic(arabic)];
+    return result;
   }
 
   /// Matches spoken text against any cell alternative spelling.
   static int _matchCell(String deltaCompact, IqroCellData targetCell) {
     if (deltaCompact.isEmpty) return 0;
-    final options = _getCellTargetOptions(targetCell.arabic);
+    final options = _getCellTargetOptions(targetCell);
     for (final opt in options) {
       final consumed = _matchSingleUnit(
         deltaCompact,
@@ -421,6 +458,74 @@ class IqroController extends ChangeNotifier {
       if (consumed > 0) return consumed;
     }
     return 0;
+  }
+
+  /// Checks if character is a vocalic carrier or vowel elongation letter in Arabic ASR output.
+  static bool _isVowelCarrier(int rune) {
+    return rune == 0x0627 /* ا */ ||
+        rune == 0x0649 /* ى */ ||
+        rune == 0x0648 /* و */ ||
+        rune == 0x064A /* ي */ ||
+        rune == 0x0647 /* ه */ ||
+        rune == 0x0621 /* ء */;
+  }
+
+  /// Consumes trailing vowel elongation letters (e.g. Alif in "دا" for "د", or Ha in "ده").
+  static int _consumeTrailingVowels(String s, int matchedLen) {
+    int end = matchedLen.clamp(0, s.length);
+    while (end < s.length && _isVowelCarrier(s.codeUnitAt(end))) {
+      end++;
+    }
+    return end;
+  }
+
+  /// Extracts consonants and checks sequential presence of [tCons] in [sCons].
+  /// Accurately returns how many characters in [s] were consumed by this match.
+  static int _matchConsonantSequence(
+    String s,
+    String sSkel,
+    String t,
+    String tSkel,
+  ) {
+    final tCons = _consonantSkeleton(tSkel);
+    final sCons = _consonantSkeleton(sSkel);
+    if (tCons.isEmpty || sCons.isEmpty) return 0;
+
+    int consMatchStart = -1;
+    // Direct consonant match within first 2 consonants (allows slight ASR prefix noise)
+    final int directIdx = sCons.indexOf(tCons);
+    if (directIdx != -1 && directIdx <= 2) {
+      consMatchStart = directIdx;
+    } else if (tCons.length >= 2 && sCons.length >= tCons.length) {
+      // Fuzzy consonant match (allows 1 phonetically close substitution)
+      for (int i = 0; i <= 2 && i + tCons.length <= sCons.length; i++) {
+        final subCons = sCons.substring(i, i + tCons.length);
+        if (_similarity(subCons, tCons) >= 0.65) {
+          consMatchStart = i;
+          break;
+        }
+      }
+    }
+
+    if (consMatchStart == -1) return 0;
+
+    // Find the character index in s corresponding to the end of matched consonants
+    final int targetConsonantCount = consMatchStart + tCons.length;
+    int consonantsSeen = 0;
+    int endInS = -1;
+
+    for (int i = 0; i < sSkel.length; i++) {
+      final r = sSkel.codeUnitAt(i);
+      if (r != 0x0627 && r != 0x0648 && r != 0x064A && r != 0x0621) {
+        consonantsSeen++;
+        if (consonantsSeen == targetConsonantCount) {
+          endInS = i + 1;
+          break;
+        }
+      }
+    }
+
+    return endInS != -1 ? endInS.clamp(1, s.length) : 0;
   }
 
   /// Matches a single unit (word or syllable) between spoken and target text.
@@ -435,58 +540,56 @@ class IqroController extends ChangeNotifier {
     final t = targetCompact.replaceAll(' ', '');
     if (s.isEmpty || t.isEmpty) return 0;
 
-    // 1. Direct contains / exact prefix
+    // 1. Direct contains / exact prefix (with trailing vowel consumption)
     final int idx = s.indexOf(t);
-    if (idx != -1 && idx <= 3) {
-      return (idx + t.length).clamp(1, s.length);
+    if (idx != -1 && idx <= 2) {
+      return _consumeTrailingVowels(s, idx + t.length);
     }
 
     // 2. Target contains spoken (when spoken is at least t.length - 1)
     if (t.contains(s) && s.length >= t.length - 1 && s.length >= 2) {
-      return s.length;
+      return _consumeTrailingVowels(s, s.length);
     }
 
-    // 3. String Levenshtein similarity on normalized text
-    // Matches natural connected recitation just like Mushaf view.
-    final double stringThresh = inQuran ? 0.55 : 0.55;
-    if (_similarity(s, t) >= stringThresh) {
-      return s.length;
-    }
-
-    // 4. Phonetic skeleton matching (acoustically close letters in Arabic)
+    // 3. Phonetic skeleton matching (acoustically close letters in Arabic)
     final sSkel = _toPhoneticSkeleton(s);
     final tSkel = _toPhoneticSkeleton(t);
     final int skelIdx = sSkel.indexOf(tSkel);
-    if (skelIdx != -1 && skelIdx <= 3) {
-      return (skelIdx + tSkel.length).clamp(1, s.length);
-    }
-    final double skelThresh = inQuran ? 0.50 : 0.50;
-    if (_similarity(sSkel, tSkel) >= skelThresh) {
-      return s.length;
+    if (skelIdx != -1 && skelIdx <= 2) {
+      return _consumeTrailingVowels(s, skelIdx + tSkel.length);
     }
 
-    // 5. Consonant skeleton matching (handles vowels/matres lectionis)
-    final sCons = _consonantSkeleton(sSkel);
-    final tCons = _consonantSkeleton(tSkel);
-    if (tCons.isNotEmpty && sCons.isNotEmpty) {
-      final int consIdx = sCons.indexOf(tCons);
-      if (consIdx != -1 && consIdx <= 2) {
-        return s.length;
+    // 4. Prefix-based Levenshtein similarity on normalized text
+    // (Evaluates prefix of s corresponding to t, preventing multi-word utterances from failing)
+    final double stringThresh = inQuran ? 0.55 : 0.50;
+    final int maxPrefixLen = (t.length + 2).clamp(1, s.length);
+    for (int len = t.length.clamp(1, s.length); len <= maxPrefixLen; len++) {
+      final sub = s.substring(0, len);
+      if (_similarity(sub, t) >= stringThresh) {
+        return _consumeTrailingVowels(s, len);
       }
-      final double consThresh = inQuran ? 0.55 : 0.55;
-      if (tCons.length >= 2 && _similarity(sCons, tCons) >= consThresh) {
-        return s.length;
+      final subSkel = sSkel.substring(0, len.clamp(0, sSkel.length));
+      if (_similarity(subSkel, tSkel) >= (stringThresh - 0.05)) {
+        return _consumeTrailingVowels(s, len);
       }
+    }
+
+    // 5. Consonant sequence matching (strips vowel inflations like Alif/Waw/Ya from ASR)
+    final int consConsumed = _matchConsonantSequence(s, sSkel, t, tSkel);
+    if (consConsumed > 0) {
+      return _consumeTrailingVowels(s, consConsumed);
     }
 
     // 6. Single letter Hijaiyah target (e.g. بِ, تِ, جِ, دِ, etc.)
     if (tSkel.length == 1) {
       if (sSkel.startsWith(tSkel) ||
           (sSkel.length <= 2 && sSkel.contains(tSkel))) {
-        return 1;
+        return _consumeTrailingVowels(s, 1);
       }
+      final tCons = _consonantSkeleton(tSkel);
+      final sCons = _consonantSkeleton(sSkel);
       if (tCons.length == 1 && sCons.startsWith(tCons)) {
-        return 1;
+        return _consumeTrailingVowels(s, 1);
       }
     }
 
@@ -496,11 +599,8 @@ class IqroController extends ChangeNotifier {
       if (firstIdx != -1 && firstIdx <= 1) {
         final int secondIdx = sSkel.indexOf(tSkel[1], firstIdx + 1);
         if (secondIdx != -1 && secondIdx - firstIdx <= 2) {
-          return (secondIdx + 1).clamp(1, s.length);
+          return _consumeTrailingVowels(s, secondIdx + 1);
         }
-      }
-      if (_similarity(sSkel, tSkel) >= 0.50) {
-        return s.length;
       }
     }
 
@@ -585,9 +685,9 @@ class IqroController extends ChangeNotifier {
           sb.write('ت');
           break;
         case 0x0636: // ض
+        case 0x0630: // ذ (Dzal -> Dal in Indonesian phonology)
           sb.write('د');
           break;
-        case 0x0630: // ذ
         case 0x0638: // ظ
         case 0x0632: // ز
           sb.write('ز');

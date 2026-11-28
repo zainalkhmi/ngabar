@@ -1,9 +1,17 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 
-/// Halaman pembuka (Intro / Splash Page) dengan kaligrafi Bismillah
-/// dalam rasm Utsmani Al-Qur'an yang anggun, transisi halus, dan branding "ngabar".
+/// Halaman pembuka (Intro Screen) bergaya ikonik Nokia "Connecting People"
+/// yang diadaptasi khusus menjadi:
+///
+///               "Mi-Qro"
+///         "read together  connect"
+///
+/// Menampilkan animasi dua tangan siluet/vektor elegan yang saling mendekat
+/// dari kiri-atas dan kanan-bawah menuju titik temu di tengah (Mushaf bersinar),
+/// dengan getaran haptik dan tipografi premium Nokia classic-modern.
 class IntroBismillahPage extends StatefulWidget {
   final VoidCallback onFinish;
 
@@ -16,8 +24,17 @@ class IntroBismillahPage extends StatefulWidget {
 class _IntroBismillahPageState extends State<IntroBismillahPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animCtrl;
-  late final Animation<double> _fadeAnim;
-  late final Animation<double> _scaleAnim;
+
+  // Animasi pergerakan dua tangan saling mendekat
+  late final Animation<double> _handApproachAnim;
+
+  // Animasi titik temu (sparkle / touch connection)
+  late final Animation<double> _sparkleAnim;
+
+  // Animasi pemunculan teks "Mi-Qro" dan "read together  connect"
+  late final Animation<double> _textFadeAnim;
+  late final Animation<double> _textSlideAnim;
+
   Timer? _autoDismissTimer;
 
   @override
@@ -25,25 +42,38 @@ class _IntroBismillahPageState extends State<IntroBismillahPage>
     super.initState();
     _animCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 2400),
     );
 
-    _fadeAnim = CurvedAnimation(
+    // 0.0 - 0.55: Kedua tangan bergerak mendekat dari sudut luar
+    _handApproachAnim = CurvedAnimation(
       parent: _animCtrl,
-      curve: Curves.easeOutCubic,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
     );
 
-    _scaleAnim = Tween<double>(begin: 0.94, end: 1.0).animate(
+    // 0.50 - 0.75: Cahaya/sparkle mekar saat ujung tangan bertemu
+    _sparkleAnim = CurvedAnimation(
+      parent: _animCtrl,
+      curve: const Interval(0.48, 0.75, curve: Curves.easeOutBack),
+    );
+
+    // 0.60 - 1.0: Nama Mi-Qro & slogan "read together  connect" muncul
+    _textFadeAnim = CurvedAnimation(
+      parent: _animCtrl,
+      curve: const Interval(0.60, 0.95, curve: Curves.easeIn),
+    );
+
+    _textSlideAnim = Tween<double>(begin: 18.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _animCtrl,
-        curve: Curves.easeOutBack,
+        curve: const Interval(0.60, 0.95, curve: Curves.easeOutCubic),
       ),
     );
 
     _animCtrl.forward();
 
-    // Otomatis masuk ke aplikasi setelah 2.8 detik jika tidak disentuh
-    _autoDismissTimer = Timer(const Duration(milliseconds: 2800), () {
+    // Otomatis selesai dan masuk ke layar utama setelah animasi selesai
+    _autoDismissTimer = Timer(const Duration(milliseconds: 3200), () {
       if (mounted) {
         _dismiss();
       }
@@ -70,58 +100,34 @@ class _IntroBismillahPageState extends State<IntroBismillahPage>
   Widget build(BuildContext context) {
     final app = AppState.instance;
     final isDark = app.isDarkMode;
-    final isId = app.isIndonesian;
 
-    const emeraldPrimary = Color(0xFF10B981);
-    const goldAccent = Color(0xFFD4AF37);
+    // Latar belakang khas Nokia biru gelap atau emerald modern
+    final Color bgColor = isDark ? const Color(0xFF030712) : const Color(0xFF0F172A);
 
-    final bgColor = isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC);
-    final cardBg = isDark
-        ? const Color(0xFF111827).withValues(alpha: 0.90)
-        : Colors.white.withValues(alpha: 0.95);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-
-    return Material(
-      color: bgColor,
-      child: GestureDetector(
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _dismiss,
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: ScaleTransition(
-            scale: _scaleAnim,
-            child: Stack(
+        child: AnimatedBuilder(
+          animation: _animCtrl,
+          builder: (context, _) {
+            final double approach = _handApproachAnim.value;
+            final double sparkle = _sparkleAnim.value;
+
+            return Stack(
               children: [
-                // Ornamen Latar Belakang Lingkaran Halus
-                Positioned(
-                  top: -100,
-                  right: -100,
+                // 1. Ambient Background Glow
+                Center(
                   child: Container(
-                    width: 320,
-                    height: 320,
+                    width: 340,
+                    height: 340,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          emeraldPrimary.withValues(alpha: isDark ? 0.18 : 0.12),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: -120,
-                  left: -80,
-                  child: Container(
-                    width: 300,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          goldAccent.withValues(alpha: isDark ? 0.12 : 0.08),
+                          const Color(0xFF10B981).withValues(alpha: 0.16 * sparkle),
+                          const Color(0xFF38BDF8).withValues(alpha: 0.08 * sparkle),
                           Colors.transparent,
                         ],
                       ),
@@ -129,242 +135,298 @@ class _IntroBismillahPageState extends State<IntroBismillahPage>
                   ),
                 ),
 
-                // Konten Utama
-                SafeArea(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                // 2. Tangan Kiri-Atas (Bergerak dari kiri atas ke tengah)
+                Positioned(
+                  top: -120 + (120 * approach),
+                  left: -120 + (120 * approach),
+                  child: Transform.rotate(
+                    angle: 0.78, // ~45 derajat
+                    child: _buildHandSilhouette(
+                      isLeft: true,
+                      approach: approach,
+                    ),
+                  ),
+                ),
+
+                // 3. Tangan Kanan-Bawah (Bergerak dari kanan bawah ke tengah)
+                Positioned(
+                  bottom: -120 + (120 * approach),
+                  right: -120 + (120 * approach),
+                  child: Transform.rotate(
+                    angle: -2.36, // ~-135 derajat berhadapan
+                    child: _buildHandSilhouette(
+                      isLeft: false,
+                      approach: approach,
+                    ),
+                  ),
+                ),
+
+                // 4. Titik Pertemuan Cahaya / Sparkle di Tengah (Connecting Moment)
+                Center(
+                  child: Opacity(
+                    opacity: sparkle.clamp(0.0, 1.0),
+                    child: Transform.scale(
+                      scale: 0.6 + (0.5 * sparkle),
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          const Spacer(flex: 3),
-
-                          // Logo / Nama Aplikasi "ngabar"
+                          // Radiant Ring
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6),
+                            width: 70,
+                            height: 70,
                             decoration: BoxDecoration(
-                              color: emeraldPrimary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: emeraldPrimary.withValues(alpha: 0.35),
-                                width: 1.2,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.menu_book_rounded,
-                                  size: 18,
-                                  color: emeraldPrimary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'ngabar',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 2.0,
-                                    color: isDark ? Colors.white : emeraldPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // Kartu Mewah Kaligrafi Bismillah dalam Bahasa Al-Qur'an
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 32),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(28),
-                              border: Border.all(
-                                color: emeraldPrimary.withValues(alpha: 0.25),
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: emeraldPrimary.withValues(
-                                      alpha: isDark ? 0.20 : 0.08),
-                                  blurRadius: 28,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Hiasan Atas
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 1.5,
-                                      color: goldAccent.withValues(alpha: 0.6),
-                                    ),
-                                    const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
-                                      child: Icon(
-                                        Icons.star_rounded,
-                                        size: 14,
-                                        color: goldAccent,
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 32,
-                                      height: 1.5,
-                                      color: goldAccent.withValues(alpha: 0.6),
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 22),
-
-                                // BISMILLAH DALAM RASM AL-QUR'AN
-                                const FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
-                                    textAlign: TextAlign.center,
-                                    textDirection: TextDirection.rtl,
-                                    style: TextStyle(
-                                      fontFamily: 'HafsSmart',
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      height: 1.6,
-                                      color: Color(0xFF10B981),
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 18),
-
-                                // Terjemahan Bismillah
-                                Text(
-                                  isId
-                                      ? 'Dengan menyebut nama Allah Yang Maha Pengasih lagi Maha Penyayang'
-                                      : 'In the name of Allah, the Entirely Merciful, the Especially Merciful',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    fontStyle: FontStyle.italic,
-                                    color: subTextColor,
-                                    height: 1.4,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 18),
-
-                                // Hiasan Bawah
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 1.5,
-                                      color: goldAccent.withValues(alpha: 0.6),
-                                    ),
-                                    const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 8),
-                                      child: Icon(
-                                        Icons.star_rounded,
-                                        size: 14,
-                                        color: goldAccent,
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 32,
-                                      height: 1.5,
-                                      color: goldAccent.withValues(alpha: 0.6),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Deskripsi Ringkas
-                          Text(
-                            isId
-                                ? 'Aplikasi Pelacak Tilawah & Tajwid Al-Qur\'an'
-                                : 'Real-Time Quran Recitation & Tajweed Tracker',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: textColor.withValues(alpha: 0.85),
-                            ),
-                          ),
-
-                          const Spacer(flex: 3),
-
-                          // Tombol Masuk / Buka Al-Qur'an
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: emeraldPrimary,
-                                foregroundColor: Colors.white,
-                                elevation: 4,
-                                shadowColor:
-                                    emeraldPrimary.withValues(alpha: 0.4),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              onPressed: _dismiss,
-                              icon: const Icon(Icons.arrow_forward_rounded,
-                                  size: 20),
-                              label: Text(
-                                isId
-                                    ? 'Mulai Membaca Al-Qur\'an'
-                                    : 'Start Reading Quran',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.85),
+                                  const Color(0xFF34D399).withValues(alpha: 0.6),
+                                  Colors.transparent,
+                                ],
                               ),
                             ),
                           ),
-
-                          const SizedBox(height: 12),
-
-                          // Keterangan Ketuk di Mana Saja
-                          Text(
-                            isId
-                                ? 'Ketuk layar untuk langsung masuk'
-                                : 'Tap anywhere to enter',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: subTextColor.withValues(alpha: 0.8),
-                            ),
+                          // Small Icon Mushaf di tengah persentuhan
+                          const Icon(
+                            Icons.auto_stories_rounded,
+                            size: 26,
+                            color: Colors.white,
                           ),
-
-                          const Spacer(flex: 1),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 5. Branding Teks: Mi-Qro & "read together  connect"
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 64),
+                      child: Opacity(
+                        opacity: _textFadeAnim.value,
+                        child: Transform.translate(
+                          offset: Offset(0, _textSlideAnim.value),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Kaligrafi Bismillah Kecil Anggun
+                              Text(
+                                'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
+                                textDirection: TextDirection.rtl,
+                                style: TextStyle(
+                                  fontFamily: 'HafsSmart',
+                                  fontSize: 16,
+                                  color: const Color(0xFF34D399).withValues(alpha: 0.9),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // NAMA APP: Mi-Qro
+                              RichText(
+                                text: const TextSpan(
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 2.2,
+                                    color: Colors.white,
+                                  ),
+                                  children: [
+                                    TextSpan(text: 'Mi-'),
+                                    TextSpan(
+                                      text: 'Qro',
+                                      style: TextStyle(
+                                        color: Color(0xFF10B981),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              // SLOGAN: "read together  connect"
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'read together',
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white.withValues(alpha: 0.92),
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      child: Container(
+                                        width: 4,
+                                        height: 4,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFF10B981),
+                                        ),
+                                      ),
+                                    ),
+                                    const Text(
+                                      'connect',
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF34D399),
+                                        letterSpacing: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 28),
+
+                              // Hint Ketuk Layar
+                              Text(
+                                'Ketuk untuk melanjutkan',
+                                style: TextStyle(
+                                  fontFamily: 'cairo',
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
+
+  /// Custom vector-like hand silhouette rendering
+  Widget _buildHandSilhouette({required bool isLeft, required double approach}) {
+    return CustomPaint(
+      size: const Size(260, 180),
+      painter: _NokiaHandPainter(
+        color: const Color(0xFF94A3B8).withValues(alpha: 0.85),
+        accentColor: const Color(0xFF10B981).withValues(alpha: 0.4),
+        isLeft: isLeft,
+      ),
+    );
+  }
+}
+
+/// Custom painter yang melukiskan lengan dan jari tangan siluet ikonik Nokia
+class _NokiaHandPainter extends CustomPainter {
+  final Color color;
+  final Color accentColor;
+  final bool isLeft;
+
+  _NokiaHandPainter({
+    required this.color,
+    required this.accentColor,
+    required this.isLeft,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final glowPaint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..isAntiAlias = true;
+
+    final path = Path();
+
+    // Gambar lengan yang menjulur (Arm & Forearm)
+    path.moveTo(0, size.height * 0.70);
+    path.cubicTo(
+      size.width * 0.25,
+      size.height * 0.65,
+      size.width * 0.45,
+      size.height * 0.55,
+      size.width * 0.60,
+      size.height * 0.48,
+    );
+
+    // Pangkal telapak tangan & pergelangan
+    path.lineTo(size.width * 0.68, size.height * 0.42);
+
+    // Ibu jari (Thumb) sedikit terbuka ke arah bawah
+    path.cubicTo(
+      size.width * 0.70,
+      size.height * 0.58,
+      size.width * 0.76,
+      size.height * 0.65,
+      size.width * 0.82,
+      size.height * 0.62,
+    );
+    path.cubicTo(
+      size.width * 0.85,
+      size.height * 0.56,
+      size.width * 0.78,
+      size.height * 0.46,
+      size.width * 0.75,
+      size.height * 0.40,
+    );
+
+    // Jari Telunjuk yang menjangkau ke depan (Index finger reaching out)
+    path.lineTo(size.width * 0.94, size.height * 0.32);
+    path.cubicTo(
+      size.width * 0.98,
+      size.height * 0.30,
+      size.width * 0.98,
+      size.height * 0.24,
+      size.width * 0.93,
+      size.height * 0.23,
+    );
+    path.lineTo(size.width * 0.76, size.height * 0.28);
+
+    // Jari Tengah & Manis melengkung santai
+    path.lineTo(size.width * 0.72, size.height * 0.22);
+    path.cubicTo(
+      size.width * 0.65,
+      size.height * 0.18,
+      size.width * 0.55,
+      size.height * 0.26,
+      size.width * 0.48,
+      size.height * 0.35,
+    );
+
+    // Kembali ke batas lengan atas
+    path.lineTo(0, size.height * 0.38);
+    path.close();
+
+    canvas.drawPath(path, paint);
+    canvas.drawPath(path, glowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NokiaHandPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.isLeft != isLeft;
 }
